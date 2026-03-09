@@ -35,3 +35,4 @@ Identity Provider for the Street Taco ecosystem at **accounts.streettaco.com.au*
 
 Data types and config are aligned with **streettaco-v0** (database types, Supabase SSR, env vars, `public/images`, globals.css, Tailwind, and component style references).
 # streettaco-accounts
+# streettaco-accounts
