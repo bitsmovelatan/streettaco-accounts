@@ -4,8 +4,8 @@ import { createServerClient } from "@supabase/ssr"
 import { SHARED_COOKIE_OPTIONS, DEFAULT_RETURN_URL, isProduction } from "@/lib/constants"
 
 /**
- * OAuth callback (IdP): exchange code for session, upsert profile, validate consent,
- * set cookies on .streettaco.com.au in production, redirect to return_to or default.
+ * OAuth callback (IdP): exchange code for session in accounts only, set cookie on .streettaco.com.au,
+ * then redirect to plus (or /consent) with a clean URL — no code parameter, so plus never sees the code.
  */
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
@@ -76,11 +76,16 @@ export async function GET(request: Request) {
     redirectTarget = new URL("/consent", origin)
     if (returnTo) redirectTarget.searchParams.set("return_to", returnTo)
   } else {
-    try {
-      redirectTarget = returnTo ? new URL(returnTo) : new URL(DEFAULT_RETURN_URL)
-    } catch {
-      redirectTarget = new URL(DEFAULT_RETURN_URL)
-    }
+    const cleanPlusUrl = (() => {
+      if (!returnTo) return DEFAULT_RETURN_URL
+      try {
+        const u = new URL(returnTo)
+        return u.origin + (u.pathname || "/")
+      } catch {
+        return DEFAULT_RETURN_URL
+      }
+    })()
+    redirectTarget = new URL(cleanPlusUrl)
   }
 
   const res = NextResponse.redirect(redirectTarget)
