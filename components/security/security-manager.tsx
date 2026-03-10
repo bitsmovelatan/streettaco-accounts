@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { ArrowLeft, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { logoutEverywhere } from "@/app/actions/security"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
 import type { Session } from "@supabase/supabase-js"
@@ -16,14 +17,24 @@ type Props = {
 }
 
 export function SecurityManager({ session, returnTo }: Props) {
+  const [mounted, setMounted] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const backHref = returnTo ?? DEFAULT_RETURN_URL
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   async function handleLogoutEverywhere() {
     setLoggingOut(true)
     await logoutEverywhere()
     window.location.href = "/login" + (returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : "")
   }
+
+  const sessionDateFormatted =
+    mounted && session?.user?.created_at
+      ? new Date(session.user.created_at).toLocaleString()
+      : null
 
   return (
     <div className="mx-auto max-w-lg">
@@ -56,11 +67,13 @@ export function SecurityManager({ session, returnTo }: Props) {
           {session && (
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
               <p className="font-medium text-foreground">This device</p>
-              <p className="text-muted-foreground">
-                {session.user?.created_at
-                  ? new Date(session.user.created_at).toLocaleString()
-                  : "Current session"}
-              </p>
+              {!mounted ? (
+                <Skeleton className="mt-1 h-4 w-24" />
+              ) : (
+                <p className="text-muted-foreground" suppressHydrationWarning>
+                  {sessionDateFormatted ?? "Current session"}
+                </p>
+              )}
             </div>
           )}
           <Button

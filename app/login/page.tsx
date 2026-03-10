@@ -1,22 +1,28 @@
 "use client"
 
-import { useEffect } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { Skeleton } from "@/components/ui/skeleton"
 import Image from "next/image"
 
 /**
  * Branded login: if already signed in, redirect to callback flow or return_to; else start Google OAuth.
- * Captures return_to and passes it through to callback.
+ * Mounted pattern: first frame is a neutral placeholder so server and client match; then session check runs.
  */
 export default function LoginPage() {
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = searchParams.get("return_to") ?? ""
+  const returnTo = mounted ? (searchParams.get("return_to") ?? "") : ""
 
   useEffect(() => {
-    if (typeof window === "undefined") return
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined") return
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
@@ -34,7 +40,22 @@ export default function LoginPage() {
         },
       })
     })
-  }, [router, returnTo])
+  }, [mounted, router, returnTo])
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
+        <div className="flex flex-col items-center gap-4">
+          <Skeleton className="h-20 w-20 rounded-xl" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="flex flex-col items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-4 w-44" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">

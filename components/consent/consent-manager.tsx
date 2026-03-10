@@ -1,22 +1,29 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { GlassCard } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { acceptConsent } from "@/app/actions/consent"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
 import Image from "next/image"
 
 /**
  * Mobile-optimized legal acceptance. On submit, updates public.profiles with tos_accepted, privacy_accepted, accepted_at and version.
+ * Uses mounted pattern so server first paint matches client (skeleton) and avoids hydration mismatch.
  */
 export function ConsentManager() {
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = searchParams.get("return_to") ?? DEFAULT_RETURN_URL
+  const returnTo = mounted ? (searchParams.get("return_to") ?? DEFAULT_RETURN_URL) : DEFAULT_RETURN_URL
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   async function handleAccept() {
     setAccepting(true)
@@ -28,6 +35,26 @@ export function ConsentManager() {
       return
     }
     router.push(returnTo)
+  }
+
+  if (!mounted) {
+    return (
+      <div className="mx-auto max-w-md">
+        <div className="mb-8 flex justify-center">
+          <Skeleton className="h-16 w-16 rounded-lg" />
+        </div>
+        <GlassCard className="space-y-6">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-[75%]" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <Skeleton className="h-10 w-full rounded-md" />
+        </GlassCard>
+      </div>
+    )
   }
 
   return (
