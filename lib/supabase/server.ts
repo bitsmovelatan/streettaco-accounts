@@ -2,8 +2,21 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { SHARED_COOKIE_OPTIONS, isProduction } from "@/lib/constants"
 
+/**
+ * Server Supabase client. Uses cookieOptions so session cookies are set with
+ * domain .streettaco.com.au in production (localhost otherwise) for IdP.
+ */
 export async function createClient() {
   const cookieStore = await cookies()
+  const cookieOptions = isProduction()
+    ? {
+        domain: SHARED_COOKIE_OPTIONS.domain,
+        path: SHARED_COOKIE_OPTIONS.path,
+        sameSite: SHARED_COOKIE_OPTIONS.sameSite as "lax" | "strict" | "none",
+        secure: SHARED_COOKIE_OPTIONS.secure,
+        httpOnly: SHARED_COOKIE_OPTIONS.httpOnly,
+      }
+    : undefined
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,6 +39,7 @@ export async function createClient() {
           }
         },
       },
+      ...(cookieOptions && { cookieOptions }),
     }
   )
 }

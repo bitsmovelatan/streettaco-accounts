@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { GlassCard } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -9,15 +9,16 @@ import { acceptConsent } from "@/app/actions/consent"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
 import Image from "next/image"
 
+type Props = { returnToFromServer?: string }
+
 /**
  * Mobile-optimized legal acceptance. On submit, updates public.profiles with tos_accepted, privacy_accepted, accepted_at and version.
  * Uses mounted pattern so server first paint matches client (skeleton) and avoids hydration mismatch.
  */
-export function ConsentManager() {
+export function ConsentManager({ returnToFromServer }: Props) {
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const returnTo = mounted ? (searchParams.get("return_to") ?? DEFAULT_RETURN_URL) : DEFAULT_RETURN_URL
+  const returnTo = returnToFromServer ?? DEFAULT_RETURN_URL
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

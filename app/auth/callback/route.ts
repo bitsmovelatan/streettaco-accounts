@@ -86,16 +86,12 @@ export async function GET(request: Request) {
   const res = NextResponse.redirect(redirectTarget)
 
   for (const { name, value, options } of cookiesToSet) {
-    const opts = isProduction()
-      ? { ...options, ...SHARED_COOKIE_OPTIONS }
-      : options
-
     res.cookies.set(name, value, {
-      path: (opts?.path as string) ?? "/",
-      maxAge: opts?.maxAge as number | undefined,
-      httpOnly: (opts?.httpOnly as boolean) ?? true,
-      secure: (opts?.secure as boolean) ?? isProduction(),
-      sameSite: (opts?.sameSite as "lax" | "strict" | "none") ?? "lax",
+      path: SHARED_COOKIE_OPTIONS.path,
+      maxAge: (options?.maxAge as number) ?? undefined,
+      httpOnly: SHARED_COOKIE_OPTIONS.httpOnly,
+      secure: isProduction() ? SHARED_COOKIE_OPTIONS.secure : false,
+      sameSite: SHARED_COOKIE_OPTIONS.sameSite,
       ...(isProduction() && { domain: SHARED_COOKIE_OPTIONS.domain }),
     })
   }
