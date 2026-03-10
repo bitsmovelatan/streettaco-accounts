@@ -4,8 +4,8 @@ import { createServerClient } from "@supabase/ssr"
 import { SHARED_COOKIE_OPTIONS, DEFAULT_RETURN_URL, isProduction } from "@/lib/constants"
 
 /**
- * OAuth callback: exchange code for session, then check public.profiles for tos_accepted and privacy_accepted.
- * Redirect to /consent if missing; otherwise redirect to return_to or DEFAULT_RETURN_URL.
+ * OAuth callback (IdP): exchange code for session, upsert profile, validate consent,
+ * set cookies on .streettaco.com.au in production, redirect to return_to or default.
  */
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
@@ -40,24 +40,18 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
-  if (error) {
-    console.error("[auth/callback] exchangeCodeForSession:", error.message)
+  if (error || !data.user) {
+    console.error("[auth/callback] Session error:", error?.message)
     const loginUrl = new URL("/login?error=auth", requestUrl.origin)
     if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
     return NextResponse.redirect(loginUrl)
   }
 
-  const userId = data.user?.id
-  if (!userId) {
-    const loginUrl = new URL("/login?error=auth", requestUrl.origin)
-    if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
-    return NextResponse.redirect(loginUrl)
-  }
+  const userId = data.user.id
 
-  // Ensure profile exists (upsert by id)
-  const fullName =
-    data.user?.user_metadata?.full_name ?? data.user?.user_metadata?.name ?? null
-  const avatarUrl = data.user?.user_metadata?.avatar_url ?? null
+  const fullName = data.user.user_metadata?.full_name ?? data.user.user_metadata?.name ?? null
+  const avatarUrl = data.user.user_metadata?.avatar_url ?? null
+
   await supabase.from("profiles").upsert(
     {
       id: userId,
@@ -68,7 +62,6 @@ export async function GET(request: Request) {
     { onConflict: "id" }
   )
 
-  // Check consent: redirect to /consent if tos_accepted or privacy_accepted missing
   const { data: profile } = await supabase
     .from("profiles")
     .select("tos_accepted, privacy_accepted")
@@ -76,17 +69,19 @@ export async function GET(request: Request) {
     .single()
 
   const needsConsent = !profile?.tos_accepted || !profile?.privacy_accepted
-  const origin =
-    process.env.NODE_ENV === "development"
-      ? requestUrl.origin
-      : request.headers.get("x-forwarded-host")
-        ? `https://${request.headers.get("x-forwarded-host")}`
-        : requestUrl.origin
+  const origin = requestUrl.origin
+  let redirectTarget: URL
 
-  const redirectTarget = needsConsent
-    ? new URL("/consent", origin)
-    : new URL(returnTo || DEFAULT_RETURN_URL)
-  if (needsConsent && returnTo) redirectTarget.searchParams.set("return_to", returnTo)
+  if (needsConsent) {
+    redirectTarget = new URL("/consent", origin)
+    if (returnTo) redirectTarget.searchParams.set("return_to", returnTo)
+  } else {
+    try {
+      redirectTarget = returnTo ? new URL(returnTo) : new URL(DEFAULT_RETURN_URL)
+    } catch {
+      redirectTarget = new URL(DEFAULT_RETURN_URL)
+    }
+  }
 
   const res = NextResponse.redirect(redirectTarget)
 
@@ -94,6 +89,7 @@ export async function GET(request: Request) {
     const opts = isProduction()
       ? { ...options, ...SHARED_COOKIE_OPTIONS }
       : options
+
     res.cookies.set(name, value, {
       path: (opts?.path as string) ?? "/",
       maxAge: opts?.maxAge as number | undefined,
