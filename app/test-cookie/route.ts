@@ -7,9 +7,9 @@ export async function GET() {
   response.cookies.set('debug-auth', 'true', {
     path: '/',
     httpOnly: false,
-    secure: true,      // Mantenlo en true si usas https://
-    sameSite: 'lax',
-    domain: '.streettaco.com.au', // <--- AÑADE ESTA LÍNEA EXACTA
+    secure: true, 
+    sameSite: 'none', // Cambia 'lax' por 'none' (requiere secure: true)
+    domain: 'streettaco.com.au', // PRUEBA SIN EL PUNTO INICIAL
     maxAge: 3600
 })
 
