@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import { SHARED_COOKIE_OPTIONS, isProduction } from "@/lib/constants"
 
+/**
+ * Master middleware for the IdP.
+ * - Keeps Supabase session in sync using the shared cookie domain (.streettaco.com.au).
+ * - If an authenticated user hits /login, sends them to return_to or the profile dashboard.
+ */
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
@@ -46,12 +51,19 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // If already authenticated and visiting /login, redirect to return_to or the profile dashboard.
+  if (user && pathname === "/login") {
+    const returnTo = request.nextUrl.searchParams.get("return_to")
+    const target = returnTo || "/profile"
+    return NextResponse.redirect(new URL(target, request.url))
+  }
+
   const protectedPaths = ["/profile", "/security", "/consent"]
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
   if (!user && isProtected) {
     const loginUrl = new URL("/login", request.url)
-    const returnTo = request.nextUrl.searchParams.get("return_to")
-    if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+    const returnTo = request.nextUrl.searchParams.get("return_to") || request.url
+    loginUrl.searchParams.set("return_to", returnTo)
     return NextResponse.redirect(loginUrl)
   }
 
