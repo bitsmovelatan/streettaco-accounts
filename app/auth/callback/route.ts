@@ -8,6 +8,7 @@ export async function GET(request: Request) {
   const return_to = searchParams.get("return_to") || "https://plus.streettaco.com.au"
 
   if (code) {
+    console.log("Intentando setear cookies para el dominio .streettaco.com.au")
     const supabase = await createClient()
     // 1. Intercambiamos el código por la sesión AQUÍ
     const { error } = await supabase.auth.exchangeCodeForSession(code)

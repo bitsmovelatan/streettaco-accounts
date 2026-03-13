@@ -28,11 +28,20 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
+            const forceOptions = isProduction()
+              ? {
+                  domain: ".streettaco.com.au" as const,
+                  path: "/",
+                  sameSite: "lax" as const,
+                  secure: true,
+                  httpOnly: true,
+                }
+              : undefined
             cookiesToSet.forEach(({ name, value, options }) => {
-              const merged = isProduction()
-                ? { ...options, ...SHARED_COOKIE_OPTIONS }
-                : options
-              cookieStore.set(name, value, merged)
+              cookieStore.set(name, value, {
+                ...options,
+                ...(forceOptions && forceOptions),
+              })
             })
           } catch {
             // setAll from Server Component - ignored when middleware refreshes sessions
