@@ -1,22 +1,26 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import { SHARED_COOKIE_OPTIONS, isProduction } from "@/lib/constants"
+import { isProduction } from "@/lib/constants"
 
 /**
- * Server Supabase client. Uses cookieOptions so session cookies are set with
- * domain .streettaco.com.au in production (localhost otherwise) for IdP.
+ * Shared-domain options so all Supabase auth cookies are stored under the root
+ * domain and plus.streettaco.com.au can read them. Only applied in production.
+ */
+const SHARED_DOMAIN_COOKIE_OPTIONS = {
+  domain: ".streettaco.com.au" as const,
+  path: "/" as const,
+  sameSite: "lax" as const,
+  secure: true,
+  httpOnly: true,
+}
+
+/**
+ * Server Supabase client. In production, setAll writes every auth cookie with
+ * domain .streettaco.com.au, path /, so plus can read the session.
  */
 export async function createClient() {
   const cookieStore = await cookies()
-  const cookieOptions = isProduction()
-    ? {
-        domain: SHARED_COOKIE_OPTIONS.domain,
-        path: SHARED_COOKIE_OPTIONS.path,
-        sameSite: SHARED_COOKIE_OPTIONS.sameSite as "lax" | "strict" | "none",
-        secure: SHARED_COOKIE_OPTIONS.secure,
-        httpOnly: SHARED_COOKIE_OPTIONS.httpOnly,
-      }
-    : undefined
+  const useSharedDomain = isProduction()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,19 +32,10 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
-            const forceOptions = isProduction()
-              ? {
-                  domain: ".streettaco.com.au" as const,
-                  path: "/",
-                  sameSite: "lax" as const,
-                  secure: true,
-                  httpOnly: true,
-                }
-              : undefined
             cookiesToSet.forEach(({ name, value, options }) => {
               cookieStore.set(name, value, {
                 ...options,
-                ...(forceOptions && forceOptions),
+                ...(useSharedDomain && SHARED_DOMAIN_COOKIE_OPTIONS),
               })
             })
           } catch {
@@ -48,7 +43,7 @@ export async function createClient() {
           }
         },
       },
-      ...(cookieOptions && { cookieOptions }),
+      ...(useSharedDomain && { cookieOptions: SHARED_DOMAIN_COOKIE_OPTIONS }),
     }
   )
 }
