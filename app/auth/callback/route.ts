@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { isProduction } from "@/lib/constants"
+import { DEFAULT_RETURN_URL, isProduction } from "@/lib/constants"
 
+/** Cookie options for .streettaco.com.au so session is available on plus and other subdomains. */
 const COOKIE_OPTIONS = {
   domain: ".streettaco.com.au" as const,
   path: "/" as const,
@@ -11,17 +12,38 @@ const COOKIE_OPTIONS = {
   httpOnly: true,
 }
 
+/**
+ * Build redirect URL with no error/code/state params so plus never sees auth artifacts.
+ * Prefer return_to, then next; default to plus.
+ */
+function getCleanRedirectUrl(returnTo: string | null, next: string | null): string {
+  const raw = returnTo ?? next ?? DEFAULT_RETURN_URL
+  try {
+    const u = new URL(raw)
+    return u.origin + (u.pathname || "/")
+  } catch {
+    return DEFAULT_RETURN_URL
+  }
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
-  const return_to = requestUrl.searchParams.get("return_to") || "https://plus.streettaco.com.au"
+  const returnTo = requestUrl.searchParams.get("return_to")
+  const next = requestUrl.searchParams.get("next")
 
   if (!code) {
-    return NextResponse.redirect(`${requestUrl.origin}/login?error=no_code`)
+    const loginUrl = new URL("/login", requestUrl.origin)
+    loginUrl.searchParams.set("error", "no_code")
+    if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+    if (next) loginUrl.searchParams.set("next", next)
+    return NextResponse.redirect(loginUrl)
   }
 
   const cookieStore = await cookies()
   const cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[] = []
+
+  const cookieOptions = isProduction() ? COOKIE_OPTIONS : undefined
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,24 +57,29 @@ export async function GET(request: Request) {
           cookiesFromSupabase.forEach((c) => cookiesToSet.push(c))
         },
       },
+      ...(cookieOptions && { cookieOptions }),
     }
   )
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code)
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error) {
-    return NextResponse.redirect(`${requestUrl.origin}/login?error=auth_failed`)
+    const loginUrl = new URL("/login", requestUrl.origin)
+    loginUrl.searchParams.set("error", "auth_failed")
+    if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+    if (next) loginUrl.searchParams.set("next", next)
+    return NextResponse.redirect(loginUrl)
   }
 
-  const cleanUrl = (() => {
-    try {
-      const u = new URL(return_to)
-      return u.origin + (u.pathname || "/")
-    } catch {
-      return "https://plus.streettaco.com.au"
-    }
-  })()
+  if (!data.session) {
+    const loginUrl = new URL("/login", requestUrl.origin)
+    loginUrl.searchParams.set("error", "no_session")
+    if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+    if (next) loginUrl.searchParams.set("next", next)
+    return NextResponse.redirect(loginUrl)
+  }
 
+  const cleanUrl = getCleanRedirectUrl(returnTo, next)
   const response = NextResponse.redirect(cleanUrl)
 
   if (isProduction()) {
