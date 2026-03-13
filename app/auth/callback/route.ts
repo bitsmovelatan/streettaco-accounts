@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { DEFAULT_RETURN_URL, isProduction } from "@/lib/constants"
+import { trustedReturnUrlSchema } from "@/lib/validations"
 
 /** Cookie options for .streettaco.com.au so session is available on plus and other subdomains. */
 const COOKIE_OPTIONS = {
@@ -18,8 +19,10 @@ const COOKIE_OPTIONS = {
  */
 function getCleanRedirectUrl(returnTo: string | null, next: string | null): string {
   const raw = returnTo ?? next ?? DEFAULT_RETURN_URL
+  const parsed = trustedReturnUrlSchema.safeParse(raw)
+  if (!parsed.success) return DEFAULT_RETURN_URL
   try {
-    const u = new URL(raw)
+    const u = new URL(parsed.data)
     return u.origin + (u.pathname || "/")
   } catch {
     return DEFAULT_RETURN_URL
@@ -29,6 +32,7 @@ function getCleanRedirectUrl(returnTo: string | null, next: string | null): stri
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
+  const expectedMatchParam = requestUrl.searchParams.get("expected_match")
   const returnTo = requestUrl.searchParams.get("return_to")
   const next = requestUrl.searchParams.get("next")
 
@@ -77,6 +81,48 @@ export async function GET(request: Request) {
     if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
     if (next) loginUrl.searchParams.set("next", next)
     return NextResponse.redirect(loginUrl)
+  }
+
+  if (expectedMatchParam !== null && expectedMatchParam !== "") {
+    const expectedMatch = parseInt(expectedMatchParam, 10)
+    if (Number.isNaN(expectedMatch) || expectedMatch < 10 || expectedMatch > 99) {
+      const loginUrl = new URL("/login", requestUrl.origin)
+      loginUrl.searchParams.set("error", "invalid_match")
+      if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+      if (next) loginUrl.searchParams.set("next", next)
+      return NextResponse.redirect(loginUrl)
+    }
+    const email = data.session.user?.email
+    if (!email) {
+      const loginUrl = new URL("/login", requestUrl.origin)
+      loginUrl.searchParams.set("error", "no_email")
+      if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+      if (next) loginUrl.searchParams.set("next", next)
+      return NextResponse.redirect(loginUrl)
+    }
+    const tokenPayload = JSON.stringify({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token ?? null,
+      })
+    const { data: row, error: updateError } = await supabase
+      .from("auth_sync")
+      .update({
+        status: "verified",
+        token: tokenPayload,
+      })
+      .eq("email", email.toLowerCase())
+      .eq("match_number", expectedMatch)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle()
+
+    if (updateError || !row) {
+      const loginUrl = new URL("/login", requestUrl.origin)
+      loginUrl.searchParams.set("error", "number_mismatch")
+      if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+      if (next) loginUrl.searchParams.set("next", next)
+      return NextResponse.redirect(loginUrl)
+    }
   }
 
   const cleanUrl = getCleanRedirectUrl(returnTo, next)

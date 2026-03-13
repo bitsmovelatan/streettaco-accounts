@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
-import { SHARED_COOKIE_OPTIONS, isProduction } from "@/lib/constants"
+import { AUTH_STORAGE_KEY, SHARED_COOKIE_OPTIONS, isProduction } from "@/lib/constants"
+import { parseReturnTo } from "@/lib/validations"
 
 /**
  * Master middleware for the IdP.
@@ -44,6 +45,11 @@ export async function updateSession(request: NextRequest) {
           })
         },
       },
+      cookieOptions: {
+        name: AUTH_STORAGE_KEY,
+        path: "/",
+        ...(isProduction() && SHARED_COOKIE_OPTIONS),
+      },
     }
   )
 
@@ -51,11 +57,13 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // If already authenticated and visiting /login, redirect to return_to or the profile dashboard.
+  // If already authenticated and visiting /login, redirect to trusted return_to or profile.
   if (user && pathname === "/login") {
     const returnTo = request.nextUrl.searchParams.get("return_to")
-    const target = returnTo || "/profile"
-    return NextResponse.redirect(new URL(target, request.url))
+    const parsed = returnTo ? parseReturnTo(returnTo) : null
+    const target =
+      parsed?.ok === true ? parsed.url : new URL("/profile", request.url).toString()
+    return NextResponse.redirect(target)
   }
 
   const protectedPaths = ["/profile", "/security", "/consent"]

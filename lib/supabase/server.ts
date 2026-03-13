@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import { isProduction } from "@/lib/constants"
+import { AUTH_STORAGE_KEY, isProduction } from "@/lib/constants"
 
 /**
  * Shared-domain options so all Supabase auth cookies are stored under the root
@@ -43,7 +43,11 @@ export async function createClient() {
           }
         },
       },
-      ...(useSharedDomain && { cookieOptions: SHARED_DOMAIN_COOKIE_OPTIONS }),
+      cookieOptions: {
+        name: AUTH_STORAGE_KEY,
+        path: "/",
+        ...(useSharedDomain && SHARED_DOMAIN_COOKIE_OPTIONS),
+      },
     }
   )
 }

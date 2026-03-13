@@ -6,17 +6,15 @@ import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { requestMagicLink } from "@/app/actions/magic-link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AuroraBackground } from "@/components/ui/aurora-background"
 import { Card } from "@/components/ui/card"
 
-type Step = "form" | "magic-sent"
-
 export default function LoginPage() {
   const [mounted, setMounted] = useState(false)
-  const [step, setStep] = useState<Step>("form")
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState<"checking" | "google" | "magic" | null>("checking")
   const [error, setError] = useState<string | null>(null)
@@ -36,7 +34,7 @@ export default function LoginPage() {
       if (user) {
         const params = new URLSearchParams()
         if (returnTo) params.set("return_to", returnTo)
-        router.replace(`/?${params.toString()}`)
+        router.replace(params.toString() ? `/?${params.toString()}` : "/")
       } else {
         setLoading(null)
       }
@@ -67,21 +65,33 @@ export default function LoginPage() {
     if (typeof window === "undefined") return
     setError(null)
     setLoading("magic")
+
+    const result = await requestMagicLink(
+      email.trim(),
+      returnTo !== DEFAULT_RETURN_URL ? returnTo : null,
+      searchParams.get("next")
+    )
+
+    if (!result.ok) {
+      setLoading(null)
+      setError(result.error)
+      return
+    }
+
     const supabase = createClient()
-    const redirectTo = new URL("/auth/callback", window.location.origin)
-    if (returnTo) redirectTo.searchParams.set("return_to", returnTo)
     const { error: magicError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
-        emailRedirectTo: redirectTo.toString(),
+        emailRedirectTo: result.emailRedirectTo,
       },
     })
+
     setLoading(null)
     if (magicError) {
       setError(magicError.message)
       return
     }
-    setStep("magic-sent")
+    router.push(result.waitingPath)
   }
 
   if (!mounted) {
@@ -157,14 +167,13 @@ export default function LoginPage() {
 
           {/* Content */}
           <AnimatePresence mode="wait">
-            {step === "form" && (
-              <motion.div
-                key="form"
-                initial={{ opacity: 0, x: 12 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12 }}
-                transition={{ duration: 0.2 }}
-              >
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.2 }}
+            >
                 <form onSubmit={handleMagicLink} className="space-y-6">
                   <div className="space-y-2">
                     <label
@@ -233,35 +242,6 @@ export default function LoginPage() {
                   </p>
                 )}
               </motion.div>
-            )}
-
-            {step === "magic-sent" && (
-              <motion.div
-                key="magic-sent"
-                initial={{ opacity: 0, x: 12 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -12 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-4 text-sm text-zinc-300"
-              >
-                <h2 className="text-lg font-semibold text-white">Magical link sent ✨</h2>
-                <p>
-                  Please check your inbox at <span className="font-medium text-white">{email}</span>.
-                  Follow the link in the email to continue your session securely.
-                </p>
-                <p className="text-xs text-zinc-500">
-                  If you do not see the email, check your spam folder or try again with a different
-                  address.
-                </p>
-                <Button
-                  type="button"
-                  onClick={() => setStep("form")}
-                  className="mt-2 h-9 rounded-xl border border-white/20 bg-transparent text-xs font-semibold text-zinc-200 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-                >
-                  Use a different email
-                </Button>
-              </motion.div>
-            )}
           </AnimatePresence>
         </Card>
       </motion.div>
