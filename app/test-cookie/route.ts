@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  const response = NextResponse.json({ message: "Forzando cookie de prueba..." })
+  const response = NextResponse.json({ message: "DEBUG: Forzando cookie insegura..." })
   
-  // Forzamos una cookie manual sin Supabase de por medio
-  response.cookies.set('test-streettaco', 'funciona', {
-    domain: '.streettaco.com.au', // EL PUNTO ES VITAL
+  // Quitamos Secure y HttpOnly para que sea visible y "fácil" de aceptar
+  response.cookies.set('debug-auth', 'true', {
     path: '/',
-    httpOnly: false, // La ponemos false para verla en la consola
-    secure: true,
+    httpOnly: false, // LA QUEREMOS VER EN LA CONSOLA
+    secure: false,   // LA QUEREMOS VER SIN HTTPS (SOLO PARA TEST)
     sameSite: 'lax',
-    maxAge: 60 * 60 // 1 hora
+    maxAge: 3600
+    // NOTA: No pongas 'domain' todavía, deja que se guarde en accounts.streettaco...
   })
 
   return response
