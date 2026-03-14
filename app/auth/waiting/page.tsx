@@ -222,12 +222,15 @@ export default function AuthWaitingPage() {
                     />
                   </motion.svg>
                 </motion.div>
-                <div className="space-y-1">
+                <div className="space-y-2">
+                  <p className="text-lg font-semibold uppercase tracking-widest text-emerald-400">
+                    COMPLETED
+                  </p>
                   <h2 className="text-xl font-semibold text-white">
                     You&apos;re signed in
                   </h2>
                   <p className="text-sm text-zinc-400">
-                    Redirecting you to your destination...
+                    Redirecting you to your destination…
                   </p>
                 </div>
               </motion.div>

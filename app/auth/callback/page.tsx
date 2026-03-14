@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client"
  * Supabase sometimes redirects with tokens in the fragment (#access_token=...).
  * The fragment is never sent to the server, so we must handle it here.
  *
- * - If hash contains access_token (and refresh_token): setSession, then redirect to
+ * - If hash contains access_token (and refresh_token): setSession, show COMPLETED, then redirect to
  *   /auth/callback/complete so the server can update auth_sync and redirect.
  * - If query contains code: redirect to /api/auth/exchange (server exchanges code, sets cookies, updates auth_sync).
  * - Otherwise: redirect to /login?error=no_code.
@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/client"
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams()
   const handled = useRef(false)
+  const [completed, setCompleted] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined" || handled.current) return
@@ -61,7 +62,8 @@ export default function AuthCallbackPage() {
               window.location.href = buildLoginUrl("auth_failed")
               return
             }
-            window.location.href = buildCompleteUrl()
+            setCompleted(true)
+            setTimeout(() => { window.location.href = buildCompleteUrl() }, 1200)
           })
           .catch(() => {
             window.location.href = buildLoginUrl("auth_failed")
@@ -87,8 +89,15 @@ export default function AuthCallbackPage() {
   }, [searchParams])
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <p className="text-muted-foreground">Completing sign-in…</p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+      {completed ? (
+        <>
+          <p className="text-2xl font-semibold tracking-wide text-emerald-500">COMPLETED</p>
+          <p className="text-sm text-muted-foreground">Redirecting to your destination…</p>
+        </>
+      ) : (
+        <p className="text-muted-foreground">Completing sign-in…</p>
+      )}
     </div>
   )
 }

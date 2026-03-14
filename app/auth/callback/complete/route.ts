@@ -19,6 +19,7 @@ function getCleanRedirectUrl(returnTo: string | null, next: string | null): stri
  * GET /auth/callback/complete?expected_match=...&return_to=...&next=...
  * Called after the client has set the session from the hash (setSession).
  * Updates auth_sync so the waiting page (e.g. on another device) can see verification, then redirects.
+ * If expected_match is missing (e.g. when Supabase redirected to /login), updates any pending auth_sync row for this email.
  */
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
@@ -37,23 +38,29 @@ export async function GET(request: Request) {
     return NextResponse.redirect(loginUrl)
   }
 
+  const email = session.user?.email
+  const tokenPayload = JSON.stringify({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token ?? null,
+  })
+
   if (expectedMatchParam !== null && expectedMatchParam !== "") {
     const expectedMatch = parseInt(expectedMatchParam, 10)
-    if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99) {
-      const email = session.user?.email
-      if (email) {
-        const tokenPayload = JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token ?? null,
-        })
-        await supabase
-          .from("auth_sync")
-          .update({ status: "verified", token: tokenPayload })
-          .eq("email", email.toLowerCase())
-          .eq("match_number", expectedMatch)
-          .eq("status", "pending")
-      }
+    if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99 && email) {
+      await supabase
+        .from("auth_sync")
+        .update({ status: "verified", token: tokenPayload })
+        .eq("email", email.toLowerCase())
+        .eq("match_number", expectedMatch)
+        .eq("status", "pending")
     }
+  } else if (email) {
+    // No expected_match (e.g. landed on /login#access_token=...). Update pending row for this email so the waiting device sees it.
+    await supabase
+      .from("auth_sync")
+      .update({ status: "verified", token: tokenPayload })
+      .eq("email", email.toLowerCase())
+      .eq("status", "pending")
   }
 
   const cleanUrl = getCleanRedirectUrl(returnTo, next)

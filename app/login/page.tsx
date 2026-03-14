@@ -20,6 +20,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState<"checking" | "google" | "magic" | null>("checking")
   const [error, setError] = useState<string | null>(null)
   const [recoveringFromHash, setRecoveringFromHash] = useState(false)
+  const [completed, setCompleted] = useState(false)
   const hashHandled = useRef(false)
 
   const router = useRouter()
@@ -53,8 +54,11 @@ export default function LoginPage() {
           hashHandled.current = false
           return
         }
-        const url = safeReturnTo.startsWith("http") ? safeReturnTo : new URL(safeReturnTo, window.location.origin).toString()
-        window.location.href = url
+        setCompleted(true)
+        const completeUrl = new URL("/auth/callback/complete", window.location.origin)
+        completeUrl.searchParams.set("return_to", safeReturnTo)
+        const url = completeUrl.toString()
+        setTimeout(() => { window.location.href = url }, 1200)
       })
       .catch(() => {
         setRecoveringFromHash(false)
@@ -148,8 +152,15 @@ export default function LoginPage() {
 
   if (recoveringFromHash) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-white">
-        <p className="text-zinc-400">Completing sign-in…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black text-white">
+        {completed ? (
+          <>
+            <p className="text-2xl font-semibold tracking-wide text-emerald-400">COMPLETED</p>
+            <p className="text-sm text-zinc-400">Redirecting to your destination…</p>
+          </>
+        ) : (
+          <p className="text-zinc-400">Completing sign-in…</p>
+        )}
       </div>
     )
   }
