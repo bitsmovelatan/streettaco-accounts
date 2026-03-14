@@ -28,6 +28,21 @@ export default function LoginPage() {
   }, [])
 
   useEffect(() => {
+    if (!mounted) return
+    const err = searchParams.get("error")
+    if (!err) return
+    const messages: Record<string, string> = {
+      no_code: "El enlace no trajo código de verificación. Prueba de nuevo desde el mismo correo.",
+      auth_failed: "El enlace expiró o ya se usó. Solicita otro magic link.",
+      no_session: "No se pudo crear la sesión. Intenta de nuevo.",
+      invalid_match: "Número de verificación inválido.",
+      no_email: "No se encontró el email en la sesión.",
+      number_mismatch: "No coincidió el número o ya se usó. Solicita un nuevo enlace desde esta página.",
+    }
+    setError(messages[err] ?? "Algo falló. Intenta de nuevo.")
+  }, [mounted, searchParams])
+
+  useEffect(() => {
     if (!mounted || typeof window === "undefined") return
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {

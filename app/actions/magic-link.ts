@@ -127,11 +127,16 @@ export async function sendMagicLinkWithNumberMatch(
   let actionLink: string
   try {
     const admin = createAdminClient()
+    // redirectTo must be allowlisted in Supabase Dashboard → Auth → URL Configuration (Redirect URLs).
+    // If not, Supabase redirects to Site URL (often Plus); set Site URL to accounts.streettaco.com.au and add callback to Redirect URLs.
     const { data, error } = await admin.auth.admin.generateLink({
       type: "magiclink",
       email: normalizedEmail,
       options: { redirectTo: callbackUrl },
     })
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[sendMagicLinkWithNumberMatch] redirectTo passed to generateLink:", callbackUrl)
+    }
     if (error) {
       console.error("[sendMagicLinkWithNumberMatch] generateLink failed:", error)
       return { ok: false, error: "Could not create sign-in link. Please try again." }

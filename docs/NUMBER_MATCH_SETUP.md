@@ -11,16 +11,34 @@ If the number never “arrives” (waiting page stays stuck), check the followin
 
 ---
 
-## 1. Supabase Auth: Redirect URLs
+## 1. Supabase Auth: Redirect URLs (fix "click goes to Plus")
 
-The magic link we send (from `generateLink`) uses `redirectTo: ourCallbackUrl`. Supabase will redirect the user to that URL after verification. In **Supabase Dashboard → Authentication → URL Configuration**:
+The link in the email is built by Supabase. We pass `redirectTo: https://accounts.streettaco.com.au/auth/callback?expected_match=…&return_to=…`. **If that URL is not allowlisted, Supabase ignores it and redirects to the default Site URL** (often `https://plus.streettaco.com.au`), so the user lands on Plus instead of the Accounts callback.
 
-- **Site URL**: `https://accounts.streettaco.com.au` (Accounts origin).
-- **Redirect URLs**: add at least:
-  - `https://accounts.streettaco.com.au/auth/callback`
-  - `http://localhost:3000/auth/callback` (for local dev)
+**Do this in Supabase Dashboard → Authentication → URL Configuration:**
 
-If the callback URL is not allowlisted, Supabase may redirect to Site URL (e.g. Plus) and the number-match flow will not run.
+1. **Site URL**  
+   Set to **`https://accounts.streettaco.com.au`** only (no path, no asterisk).  
+   Supabase does **not** allow wildcards here. If you use a path (e.g. `/auth/callback`) or `*`, Supabase may redirect to a wrong URL (e.g. `.../auth/callback*`) and the callback will fail.  
+   This is the default when no redirect is allowed; if it’s Plus, magic links will go to Plus.
+
+2. **Redirect URLs**  
+   Add at least:
+   - `https://accounts.streettaco.com.au/auth/callback`
+   - Or with wildcard: `https://*.streettaco.com.au/auth/callback` (wildcards are allowed here)  
+   And for local dev:
+   - `http://localhost:3000/auth/callback` or `http://localhost:3000/**`
+
+3. **Save** and send a new magic link; the link in the email should now go to Accounts and then to your callback (number match + redirect to return_to).
+
+### When you click the number on another device (e.g. phone)
+
+The flow is: **PC** has the waiting page open → you click the number in the email on your **phone** → the callback runs (from the phone’s request) → it must update `auth_sync` → the **PC** sees that update (Realtime or polling) and sets the session, then redirects.
+
+- If you end up on **login** after clicking on the phone, look at the URL: `?error=...` tells you why (e.g. `no_code`, `auth_failed`, `number_mismatch`). The login page now shows a short message for each.
+- For the **PC** to get the session, the callback must receive **both** the auth payload and **`expected_match`**. The link Supabase builds must keep the full redirect URL we pass (with query params). In **Redirect URLs** you can use e.g. `https://accounts.streettaco.com.au/auth/callback` or `https://*.streettaco.com.au/auth/callback` so the full URL with `expected_match` and `return_to` is allowed. Do **not** put a path or wildcard in **Site URL** (see above).
+- Supabase may redirect with tokens in the **URL hash** (`#access_token=...`) instead of `?code=...`. The hash is only visible in the browser. We handle this with a client-side callback page that runs in the browser: it reads the hash, calls `setSession`, then redirects to `/auth/callback/complete`, which updates `auth_sync` and redirects to `return_to`.
+- Ensure **Realtime** and **RLS** (below) are set so the PC’s waiting page can see the `auth_sync` update; otherwise only the device that clicked gets the session (via cookies), and the PC keeps waiting.
 
 ---
 
