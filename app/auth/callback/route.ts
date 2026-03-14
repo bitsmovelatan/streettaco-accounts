@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { DEFAULT_RETURN_URL, isProduction } from "@/lib/constants"
+import { AUTH_STORAGE_KEY, DEFAULT_RETURN_URL, isProduction } from "@/lib/constants"
 import { trustedReturnUrlSchema } from "@/lib/validations"
 
 /** Cookie options for .streettaco.com.au so session is available on plus and other subdomains. */
@@ -61,7 +61,11 @@ export async function GET(request: Request) {
           cookiesFromSupabase.forEach((c) => cookiesToSet.push(c))
         },
       },
-      ...(cookieOptions && { cookieOptions }),
+      cookieOptions: {
+        name: AUTH_STORAGE_KEY,
+        path: "/",
+        ...(cookieOptions && cookieOptions),
+      },
     }
   )
 
