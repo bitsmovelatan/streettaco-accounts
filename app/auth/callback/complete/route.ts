@@ -30,10 +30,12 @@ export async function GET(request: Request) {
     refresh_token: session.refresh_token ?? null,
   })
 
+  // Run auth_sync update asynchronously (fire-and-forget). Redirect the validator immediately to /actions/closer;
+  // the waiting device will see the update via Realtime or polling shortly.
   if (expectedMatchParam !== null && expectedMatchParam !== "") {
     const expectedMatch = parseInt(expectedMatchParam, 10)
     if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99 && email) {
-      const { error } = await supabase
+      supabase
         .from("auth_sync")
         .update({ status: "verified", token: tokenPayload })
         .eq("email", email.toLowerCase())
@@ -41,26 +43,27 @@ export async function GET(request: Request) {
         .eq("status", "pending")
         .select("id")
         .maybeSingle()
-      if (error) {
-        console.error("[auth/callback/complete] auth_sync update failed:", { code: error.code, message: error.message })
-      }
+        .then(({ error }) => {
+          if (error) {
+            console.error("[auth/callback/complete] auth_sync update failed:", { code: error.code, message: error.message })
+          }
+        })
     }
   } else if (email) {
-    // No expected_match (e.g. landed on /login#access_token=...). Update pending row for this email so the waiting device sees it.
-    const { error } = await supabase
+    supabase
       .from("auth_sync")
       .update({ status: "verified", token: tokenPayload })
       .eq("email", email.toLowerCase())
       .eq("status", "pending")
       .select("id")
       .maybeSingle()
-    if (error) {
-      console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", { code: error.code, message: error.message })
-    }
+      .then(({ error }) => {
+        if (error) {
+          console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", { code: error.code, message: error.message })
+        }
+      })
   }
 
-  // Only the validator (device that clicked) hits this route. Redirect to /actions/closer so we
-  // sign them out and show "You can close this tab...". The waiting device gets the session via auth_sync and redirects to return_to.
   const closerUrl = new URL("/actions/closer", requestUrl.origin)
   return NextResponse.redirect(closerUrl.toString())
 }
