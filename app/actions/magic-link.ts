@@ -78,15 +78,27 @@ export async function requestMagicLink(
   const matchNumber = generateMatchNumber()
   const supabase = await createClient()
 
-  const { error: insertError } = await supabase.from("auth_sync").insert({
-    email: normalizedEmail,
-    match_number: matchNumber,
-    status: "pending",
-  })
+  const { data: insertData, error: insertError } = await supabase
+    .from("auth_sync")
+    .insert({
+      email: normalizedEmail,
+      match_number: matchNumber,
+      status: "pending",
+    })
+    .select("id")
+    .single()
 
   if (insertError) {
-    console.error("[requestMagicLink] auth_sync insert failed:", insertError)
+    console.error("[requestMagicLink] auth_sync insert failed:", {
+      code: insertError.code,
+      message: insertError.message,
+      details: insertError.details,
+    })
     return { ok: false, error: "Could not start sign-in. Please try again." }
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[requestMagicLink] auth_sync insert ok:", { id: insertData?.id, email: normalizedEmail, match_number: matchNumber })
   }
 
   const callbackUrl = new URL("/auth/callback", ACCOUNTS_ORIGIN)

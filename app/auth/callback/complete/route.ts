@@ -47,20 +47,30 @@ export async function GET(request: Request) {
   if (expectedMatchParam !== null && expectedMatchParam !== "") {
     const expectedMatch = parseInt(expectedMatchParam, 10)
     if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99 && email) {
-      await supabase
+      const { error } = await supabase
         .from("auth_sync")
         .update({ status: "verified", token: tokenPayload })
         .eq("email", email.toLowerCase())
         .eq("match_number", expectedMatch)
         .eq("status", "pending")
+        .select("id")
+        .maybeSingle()
+      if (error) {
+        console.error("[auth/callback/complete] auth_sync update failed:", { code: error.code, message: error.message })
+      }
     }
   } else if (email) {
     // No expected_match (e.g. landed on /login#access_token=...). Update pending row for this email so the waiting device sees it.
-    await supabase
+    const { error } = await supabase
       .from("auth_sync")
       .update({ status: "verified", token: tokenPayload })
       .eq("email", email.toLowerCase())
       .eq("status", "pending")
+      .select("id")
+      .maybeSingle()
+    if (error) {
+      console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", { code: error.code, message: error.message })
+    }
   }
 
   const cleanUrl = getCleanRedirectUrl(returnTo, next)

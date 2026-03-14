@@ -7,7 +7,33 @@ The "Check your email and select this number to securely sign in" flow uses:
 3. **Callback** → exchanges code, updates `auth_sync` to `verified`, sets cookie, redirects to `return_to`.
 4. **Waiting page** → Realtime or **polling** (every 2s) detects `status = 'verified'` → sets session and redirects.
 
-If the number never “arrives” (waiting page stays stuck), check the following.
+If the number never “arrives” (waiting page stays stuck), check the following. If **you see no rows in `auth_sync`**, see §0 below.
+
+---
+
+## 0. Table `auth_sync` — create and verify
+
+If there are **no rows** in `auth_sync` when you request a magic link, the table may be missing or RLS may be blocking the insert. The insert runs in `requestMagicLink()` **before** the email is sent; if it fails, the user sees "Could not start sign-in. Please try again." and no email is sent.
+
+**1. Create the table** (Supabase Dashboard → SQL Editor). You can run the full script in **`docs/AUTH_SYNC_TABLE.sql`** (table + RLS + Realtime). Or run manually:
+
+```sql
+-- Number-match magic link flow (Accounts).
+CREATE TABLE IF NOT EXISTS public.auth_sync (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL,
+  match_number smallint NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified')),
+  token text,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_sync_lookup ON public.auth_sync (email, match_number, status);
+ALTER TABLE public.auth_sync ENABLE ROW LEVEL SECURITY;
+```
+
+**2. Add RLS policies** (see §3). Without INSERT for `anon`, the server cannot insert.
+
+**3. Verify:** After clicking "Send magic link", run `SELECT * FROM public.auth_sync ORDER BY created_at DESC LIMIT 5;` — you should see a row with `status = 'pending'`. If not, check server logs for `[requestMagicLink] auth_sync insert failed:` and the error (e.g. relation does not exist, or RLS violation).
 
 ---
 
@@ -63,7 +89,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.auth_sync;
 ## 3. RLS and `auth_sync`
 
 - **Insert** (magic-link action): anon/service role must be able to `INSERT` into `auth_sync`.
-- **Update** (callback route): anon must be able to `UPDATE` the row where `email`, `match_number`, `status = 'pending'`.
+- **Update** (callback/complete): when the user clicks the link they already have a session, so Supabase uses the **authenticated** role. You need an UPDATE policy for **authenticated** (see below); if only `anon` can update, the row never becomes `verified`.
 - **Select** (polling via `checkMagicLinkVerified`): anon must be able to `SELECT` the row where `email`, `match_number`, `status = 'verified'` (so the waiting page can poll and get the token).
 
 Example permissive policies (tune to your security needs):
@@ -73,9 +99,13 @@ Example permissive policies (tune to your security needs):
 CREATE POLICY "auth_sync_insert" ON public.auth_sync
   FOR INSERT TO anon WITH CHECK (true);
 
--- Allow update for callback (match pending row)
+-- Allow update for callback (match pending row). Also need auth_sync_update_authenticated (user has session when clicking link).
 CREATE POLICY "auth_sync_update" ON public.auth_sync
   FOR UPDATE TO anon USING (status = 'pending');
+
+CREATE POLICY "auth_sync_update_authenticated" ON public.auth_sync
+  FOR UPDATE TO authenticated
+  USING (status = 'pending' AND email = lower(auth.jwt() ->> 'email'));
 
 -- Allow select for polling when verified (so waiting page can read token)
 CREATE POLICY "auth_sync_select_verified" ON public.auth_sync
