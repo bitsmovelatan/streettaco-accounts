@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server"
 const TOS_VERSION = "1.0"
 const PRIVACY_VERSION = "1.0"
 
+/**
+ * Accept ToS & Privacy (profiles) and set app_metadata so Plus can consider consent done.
+ */
 export async function acceptConsent(): Promise<{ error?: string }> {
   const supabase = await createClient()
   const {
@@ -28,6 +31,17 @@ export async function acceptConsent(): Promise<{ error?: string }> {
   if (error) {
     console.error("acceptConsent:", error)
     return { error: error.message }
+  }
+
+  const { error: metaError } = await supabase.auth.updateUser({
+    data: {
+      consent_accepted: true,
+      consent_timestamp: now,
+    },
+  })
+  if (metaError) {
+    console.error("acceptConsent updateUser:", metaError)
+    // non-fatal: profile consent is saved
   }
   return {}
 }

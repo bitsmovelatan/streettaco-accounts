@@ -3,10 +3,11 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ConsentManager } from "@/components/consent/consent-manager"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { getPendingLegalDocumentsForUser } from "@/app/actions/legal"
 
 export const metadata = {
   title: "Legal consent | Street Taco Accounts",
-  description: "Accept Terms of Service and Privacy Policy to continue.",
+  description: "Accept Terms of Service, Privacy Policy and legal documents to continue.",
 }
 
 async function getOrigin() {
@@ -40,14 +41,21 @@ export default async function ConsentPage({
     .eq("id", user.id)
     .single()
 
-  const needsConsent = !profile?.tos_accepted || !profile?.privacy_accepted
-  if (!needsConsent) {
+  const needsProfileConsent = !profile?.tos_accepted || !profile?.privacy_accepted
+  const { pendingDocuments } = await getPendingLegalDocumentsForUser()
+  const needsLegalDocsConsent = pendingDocuments.length > 0
+
+  if (!needsProfileConsent && !needsLegalDocsConsent) {
     redirect(params.return_to ?? DEFAULT_RETURN_URL)
   }
 
   return (
     <div className="min-h-screen px-4 py-8 sm:py-12">
-      <ConsentManager returnToFromServer={params.return_to ?? undefined} />
+      <ConsentManager
+        returnToFromServer={params.return_to ?? undefined}
+        needsProfileConsent={needsProfileConsent}
+        pendingLegalDocuments={pendingDocuments}
+      />
     </div>
   )
 }

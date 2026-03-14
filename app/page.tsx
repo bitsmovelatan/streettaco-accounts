@@ -2,6 +2,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { getPendingLegalDocumentsForUser } from "@/app/actions/legal"
 
 async function getOrigin() {
   const headersList = await headers()
@@ -35,9 +36,11 @@ export default async function HomePage({
     .eq("id", user.id)
     .single()
 
-  const needsConsent = !profile?.tos_accepted || !profile?.privacy_accepted
+  const needsProfileConsent = !profile?.tos_accepted || !profile?.privacy_accepted
+  const { pendingDocuments } = await getPendingLegalDocumentsForUser()
+  const needsLegalConsent = pendingDocuments.length > 0
 
-  if (needsConsent) {
+  if (needsProfileConsent || needsLegalConsent) {
     const consentUrl = new URL("/consent", origin)
     if (return_to) consentUrl.searchParams.set("return_to", return_to)
     redirect(consentUrl.toString())
