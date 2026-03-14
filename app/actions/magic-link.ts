@@ -70,3 +70,34 @@ export async function requestMagicLink(
     waitingPath: waitingPath.pathname + waitingPath.search,
   }
 }
+
+export type CheckMagicLinkVerifiedResult =
+  | { ok: true; token: string }
+  | { ok: false }
+
+/**
+ * Check if the magic link was verified (callback already ran and updated auth_sync).
+ * Used by the waiting page as a polling fallback when Realtime does not fire
+ * (e.g. table not in publication, or user opened link in another tab).
+ * Requires auth_sync RLS to allow SELECT for anon on the matching row.
+ */
+export async function checkMagicLinkVerified(
+  email: string,
+  matchNumber: number
+): Promise<CheckMagicLinkVerifiedResult> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (Number.isNaN(matchNumber) || matchNumber < 10 || matchNumber > 99) {
+    return { ok: false }
+  }
+  const supabase = await createClient()
+  const { data: row, error } = await supabase
+    .from("auth_sync")
+    .select("token")
+    .eq("email", normalizedEmail)
+    .eq("match_number", matchNumber)
+    .eq("status", "verified")
+    .maybeSingle()
+
+  if (error || !row?.token) return { ok: false }
+  return { ok: true, token: row.token as string }
+}

@@ -1,14 +1,17 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
 import { isTrustedReturnUrl } from "@/lib/validations"
+import { checkMagicLinkVerified } from "@/app/actions/magic-link"
 import { AuroraBackground } from "@/components/ui/aurora-background"
 import { Card } from "@/components/ui/card"
+
+const POLL_INTERVAL_MS = 2000
 
 const CAPTION =
   "Check your email and select this number to securely sign in."
@@ -35,14 +38,42 @@ export default function AuthWaitingPage() {
     window.location.href = url
   }, [returnTo])
 
+  const appliedRef = useRef(false)
+
+  function applyTokenAndRedirect(tokenRaw: string, supabaseClient: ReturnType<typeof createClient>) {
+    if (appliedRef.current) return
+    let access_token: string
+    let refresh_token = ""
+    try {
+      const parsed = JSON.parse(tokenRaw) as { access_token?: string; refresh_token?: string | null }
+      access_token = parsed.access_token ?? tokenRaw
+      refresh_token = parsed.refresh_token ?? ""
+    } catch {
+      access_token = tokenRaw
+    }
+    if (!access_token) return
+    appliedRef.current = true
+    supabaseClient.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
+      if (error) {
+        setStatus("error")
+        appliedRef.current = false
+        return
+      }
+      setStatus("success")
+      setTimeout(redirectToReturn, 1800)
+    })
+  }
+
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    if (!mounted || !email.trim() || !isValidNumber) return
+    if (!mounted || !email.trim() || !isValidNumber || matchNumber === null) return
 
     const supabase = createClient()
+    const normalizedEmail = email.trim().toLowerCase()
+
     const channel = supabase
       .channel("auth_sync_waiting")
       .on(
@@ -51,50 +82,26 @@ export default function AuthWaitingPage() {
           event: "UPDATE",
           schema: "public",
           table: "auth_sync",
-          filter: `email=eq.${email.trim().toLowerCase()}`,
+          filter: `email=eq.${normalizedEmail}`,
         },
         async (payload) => {
-          const row = payload.new as {
-            status?: string
-            token?: string | null
-          }
+          const row = payload.new as { status?: string; token?: string | null }
           if (row?.status !== "verified" || !row?.token) return
-
-          let access_token: string
-          let refresh_token: string = ""
-          try {
-            const parsed = JSON.parse(row.token) as {
-              access_token?: string
-              refresh_token?: string | null
-            }
-            access_token = parsed.access_token ?? (row.token as string)
-            refresh_token = parsed.refresh_token ?? ""
-          } catch {
-            access_token = row.token
-            refresh_token = ""
-          }
-
-          if (!access_token) return
-          if (!refresh_token) return
-
-          const { error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token,
-          })
-          if (error) {
-            setStatus("error")
-            return
-          }
-          setStatus("success")
-          setTimeout(redirectToReturn, 1800)
+          applyTokenAndRedirect(row.token, supabase)
         }
       )
       .subscribe()
 
+    const pollInterval = setInterval(async () => {
+      const result = await checkMagicLinkVerified(normalizedEmail, matchNumber)
+      if (result.ok) applyTokenAndRedirect(result.token, supabase)
+    }, POLL_INTERVAL_MS)
+
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [mounted, email, isValidNumber, redirectToReturn])
+  }, [mounted, email, isValidNumber, matchNumber, redirectToReturn])
 
   if (!mounted) {
     return (
