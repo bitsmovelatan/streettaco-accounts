@@ -1,19 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-import { DEFAULT_RETURN_URL } from "@/lib/constants"
-import { trustedReturnUrlSchema } from "@/lib/validations"
-
-function getCleanRedirectUrl(returnTo: string | null, next: string | null): string {
-  const raw = returnTo ?? next ?? DEFAULT_RETURN_URL
-  const parsed = trustedReturnUrlSchema.safeParse(raw)
-  if (!parsed.success) return DEFAULT_RETURN_URL
-  try {
-    const u = new URL(parsed.data)
-    return u.origin + (u.pathname || "/")
-  } catch {
-    return DEFAULT_RETURN_URL
-  }
-}
 
 /**
  * GET /auth/callback/complete?expected_match=...&return_to=...&next=...
@@ -73,6 +59,8 @@ export async function GET(request: Request) {
     }
   }
 
-  const cleanUrl = getCleanRedirectUrl(returnTo, next)
-  return NextResponse.redirect(cleanUrl)
+  // Only the validator (device that clicked) hits this route. Redirect to verified-done so we can
+  // sign them out and show "CONNECTED - close this tab". The waiting device gets the session via auth_sync and redirects to return_to.
+  const verifiedDoneUrl = new URL("/auth/verified-done", requestUrl.origin)
+  return NextResponse.redirect(verifiedDoneUrl.toString())
 }
