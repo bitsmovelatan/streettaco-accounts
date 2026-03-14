@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { isTrustedReturnUrl } from "@/lib/validations"
 import { sendMagicLinkWithNumberMatch } from "@/app/actions/magic-link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -18,14 +19,49 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState<"checking" | "google" | "magic" | null>("checking")
   const [error, setError] = useState<string | null>(null)
+  const [recoveringFromHash, setRecoveringFromHash] = useState(false)
+  const hashHandled = useRef(false)
 
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnTo = mounted ? (searchParams.get("return_to") ?? DEFAULT_RETURN_URL) : DEFAULT_RETURN_URL
+  const safeReturnTo = isTrustedReturnUrl(returnTo) ? returnTo : DEFAULT_RETURN_URL
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Supabase sometimes redirects to /login#access_token=... instead of /auth/callback. Recover session from hash and redirect.
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined" || hashHandled.current) return
+    const hash = window.location.hash
+    if (!hash || !hash.startsWith("#")) return
+    const hashParams = new URLSearchParams(hash.slice(1))
+    const access_token = hashParams.get("access_token")
+    const refresh_token = hashParams.get("refresh_token") ?? ""
+    if (!access_token) return
+
+    hashHandled.current = true
+    setRecoveringFromHash(true)
+    const supabase = createClient()
+    supabase.auth
+      .setSession({ access_token, refresh_token })
+      .then(({ error: err }) => {
+        if (err) {
+          setRecoveringFromHash(false)
+          setError("No se pudo iniciar sesión con este enlace. Intenta de nuevo.")
+          hashHandled.current = false
+          return
+        }
+        const url = safeReturnTo.startsWith("http") ? safeReturnTo : new URL(safeReturnTo, window.location.origin).toString()
+        window.location.href = url
+      })
+      .catch(() => {
+        setRecoveringFromHash(false)
+        setError("Algo falló. Intenta de nuevo.")
+        hashHandled.current = false
+      })
+  }, [mounted, safeReturnTo])
 
   useEffect(() => {
     if (!mounted) return
@@ -106,6 +142,14 @@ export default function LoginPage() {
           <Skeleton className="mb-2 h-1 w-full rounded-full" />
           <Skeleton className="h-[320px] w-full rounded-2xl" />
         </div>
+      </div>
+    )
+  }
+
+  if (recoveringFromHash) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black text-white">
+        <p className="text-zinc-400">Completing sign-in…</p>
       </div>
     )
   }
