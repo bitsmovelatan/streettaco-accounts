@@ -76,9 +76,9 @@ export async function requestMagicLink(
     returnParsed?.ok === true ? returnParsed.url : null
 
   const matchNumber = generateMatchNumber()
-  const supabase = await createClient()
-
-  const { data: insertData, error: insertError } = await supabase
+  // Use admin client so INSERT bypasses RLS (service_role). Avoids 42501 when anon/authenticated policies don't apply.
+  const admin = createAdminClient()
+  const { data: insertData, error: insertError } = await admin
     .from("auth_sync")
     .insert({
       email: normalizedEmail,

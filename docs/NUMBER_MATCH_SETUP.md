@@ -88,7 +88,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.auth_sync;
 
 ## 3. RLS and `auth_sync`
 
-- **Insert** (magic-link action): anon/service role must be able to `INSERT` into `auth_sync`.
+- **Insert** (magic-link action): the server may run with a session cookie (e.g. user still logged in), so Supabase uses **authenticated**. You need INSERT for both **anon** and **authenticated** (see policies below).
 - **Update** (callback/complete): when the user clicks the link they already have a session, so Supabase uses the **authenticated** role. You need an UPDATE policy for **authenticated** (see below); if only `anon` can update, the row never becomes `verified`.
 - **Select** (polling via `checkMagicLinkVerified`): anon must be able to `SELECT` the row where `email`, `match_number`, `status = 'verified'` (so the waiting page can poll and get the token).
 
@@ -98,6 +98,9 @@ Example permissive policies (tune to your security needs):
 -- Allow insert for magic link flow
 CREATE POLICY "auth_sync_insert" ON public.auth_sync
   FOR INSERT TO anon WITH CHECK (true);
+
+CREATE POLICY "auth_sync_insert_authenticated" ON public.auth_sync
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 -- Allow update for callback (match pending row). Also need auth_sync_update_authenticated (user has session when clicking link).
 CREATE POLICY "auth_sync_update" ON public.auth_sync

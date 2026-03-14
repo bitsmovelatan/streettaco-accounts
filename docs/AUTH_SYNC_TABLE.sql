@@ -22,9 +22,12 @@ CREATE INDEX IF NOT EXISTS auth_sync_lookup ON public.auth_sync (email, match_nu
 ALTER TABLE public.auth_sync ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies
--- INSERT: anon (magic link request from login page, no session yet)
+-- INSERT: anon (no session) and authenticated (if user has a session cookie when requesting magic link)
 CREATE POLICY "auth_sync_insert" ON public.auth_sync
   FOR INSERT TO anon WITH CHECK (true);
+
+CREATE POLICY "auth_sync_insert_authenticated" ON public.auth_sync
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 -- UPDATE: anon (legacy) and authenticated (callback/complete runs with user session, so role is authenticated)
 CREATE POLICY "auth_sync_update" ON public.auth_sync
@@ -35,6 +38,9 @@ CREATE POLICY "auth_sync_update_authenticated" ON public.auth_sync
   USING (status = 'pending' AND email = lower(auth.jwt() ->> 'email'));
 
 -- SELECT: anon (waiting page polls for verified row)
+CREATE POLICY "auth_sync_select_verified" ON public.auth_sync
+  FOR SELECT TO authenticated USING (status = 'verified');
+
 CREATE POLICY "auth_sync_select_verified" ON public.auth_sync
   FOR SELECT TO anon USING (status = 'verified');
 
