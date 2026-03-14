@@ -30,12 +30,10 @@ export async function GET(request: Request) {
     refresh_token: session.refresh_token ?? null,
   })
 
-  // Run auth_sync update asynchronously (fire-and-forget). Redirect the validator immediately to /actions/closer;
-  // the waiting device will see the update via Realtime or polling shortly.
   if (expectedMatchParam !== null && expectedMatchParam !== "") {
     const expectedMatch = parseInt(expectedMatchParam, 10)
     if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99 && email) {
-      supabase
+      const { error } = await supabase
         .from("auth_sync")
         .update({ status: "verified", token: tokenPayload })
         .eq("email", email.toLowerCase())
@@ -43,25 +41,21 @@ export async function GET(request: Request) {
         .eq("status", "pending")
         .select("id")
         .maybeSingle()
-        .then(({ error }) => {
-          if (error) {
-            console.error("[auth/callback/complete] auth_sync update failed:", { code: error.code, message: error.message })
-          }
-        })
+      if (error) {
+        console.error("[auth/callback/complete] auth_sync update failed:", { code: error.code, message: error.message })
+      }
     }
   } else if (email) {
-    supabase
+    const { error } = await supabase
       .from("auth_sync")
       .update({ status: "verified", token: tokenPayload })
       .eq("email", email.toLowerCase())
       .eq("status", "pending")
       .select("id")
       .maybeSingle()
-      .then(({ error }) => {
-        if (error) {
-          console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", { code: error.code, message: error.message })
-        }
-      })
+    if (error) {
+      console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", { code: error.code, message: error.message })
+    }
   }
 
   const closerUrl = new URL("/actions/closer", requestUrl.origin)

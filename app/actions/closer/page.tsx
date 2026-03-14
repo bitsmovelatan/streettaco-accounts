@@ -1,28 +1,20 @@
-"use client"
+import { CloserSignOut } from "./CloserSignOut"
 
-import { useEffect, useRef } from "react"
-import { createClient } from "@/lib/supabase/client"
+export const metadata = {
+  title: "Close this tab | Street Taco Accounts",
+}
 
 /**
- * Shown on the device that clicked the number in the email (validator).
- * After number verification, callback/complete redirects here. We sign the validator out
- * so they don't keep a session; the waiting device gets the session via auth_sync and redirects to Plus.
+ * Shown on the device that clicked the number (validator). Message is server-rendered so it appears
+ * immediately on mobile; CloserSignOut runs in client to clear the session.
  */
 export default function ActionsCloserPage() {
-  const signedOut = useRef(false)
-
-  useEffect(() => {
-    if (signedOut.current) return
-    signedOut.current = true
-    const supabase = createClient()
-    supabase.auth.signOut()
-  }, [])
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4">
       <p className="text-center text-sm text-zinc-600">
         You can close this tab. Sign-in will complete on your other device.
       </p>
+      <CloserSignOut />
     </div>
   )
 }

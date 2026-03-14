@@ -19,7 +19,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState<"checking" | "google" | "magic" | null>("checking")
   const [error, setError] = useState<string | null>(null)
-  const [recoveringFromHash, setRecoveringFromHash] = useState(false)
+  // If URL has access_token in hash (Supabase sent user to /login from mobile), show recovering UI immediately to avoid blank screen
+  const [recoveringFromHash, setRecoveringFromHash] = useState(() =>
+    typeof window !== "undefined" && window.location.hash.includes("access_token")
+  )
   const [completed, setCompleted] = useState(false)
   const hashHandled = useRef(false)
 
@@ -58,7 +61,7 @@ export default function LoginPage() {
         const completeUrl = new URL("/auth/callback/complete", window.location.origin)
         completeUrl.searchParams.set("return_to", safeReturnTo)
         const url = completeUrl.toString()
-        setTimeout(() => { window.location.href = url }, 1200)
+        setTimeout(() => { window.location.href = url }, 600)
       })
       .catch(() => {
         setRecoveringFromHash(false)
@@ -135,21 +138,7 @@ export default function LoginPage() {
     router.push(result.waitingPath)
   }
 
-  if (!mounted) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-4">
-        <div className="flex flex-col items-center gap-4">
-          <Skeleton className="h-20 w-20 rounded-xl" />
-          <Skeleton className="h-4 w-40" />
-        </div>
-        <div className="mt-8 w-full max-w-md">
-          <Skeleton className="mb-2 h-1 w-full rounded-full" />
-          <Skeleton className="h-[320px] w-full rounded-2xl" />
-        </div>
-      </div>
-    )
-  }
-
+  // When URL has access_token in hash (e.g. mobile from email), show this immediately to avoid blank screen
   if (recoveringFromHash) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black text-white">
@@ -161,6 +150,21 @@ export default function LoginPage() {
         ) : (
           <p className="text-zinc-400">Completing sign-in…</p>
         )}
+      </div>
+    )
+  }
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-4">
+        <div className="flex flex-col items-center gap-4">
+          <Skeleton className="h-20 w-20 rounded-xl" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="mt-8 w-full max-w-md">
+          <Skeleton className="mb-2 h-1 w-full rounded-full" />
+          <Skeleton className="h-[320px] w-full rounded-2xl" />
+        </div>
       </div>
     )
   }
