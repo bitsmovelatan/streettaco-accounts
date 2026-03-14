@@ -12,11 +12,12 @@ import { AuroraBackground } from "@/components/ui/aurora-background"
 import { Card } from "@/components/ui/card"
 
 const POLL_INTERVAL_MS = 2000
+const MAX_POLL_ATTEMPTS = 150 // ~5 min at 2s; then stop to avoid infinite loop
 
 const CAPTION =
   "Check your email and select this number to securely sign in."
 
-type Status = "waiting" | "success" | "error"
+type Status = "waiting" | "success" | "error" | "expired"
 
 export default function AuthWaitingPage() {
   const router = useRouter()
@@ -73,6 +74,7 @@ export default function AuthWaitingPage() {
 
     const supabase = createClient()
     const normalizedEmail = email.trim().toLowerCase()
+    let pollCount = 0
 
     const channel = supabase
       .channel("auth_sync_waiting")
@@ -93,8 +95,17 @@ export default function AuthWaitingPage() {
       .subscribe()
 
     const pollInterval = setInterval(async () => {
+      pollCount += 1
+      if (pollCount > MAX_POLL_ATTEMPTS) {
+        clearInterval(pollInterval)
+        setStatus("expired")
+        return
+      }
       const result = await checkMagicLinkVerified(normalizedEmail, matchNumber)
-      if (result.ok) applyTokenAndRedirect(result.token, supabase)
+      if (result.ok) {
+        clearInterval(pollInterval)
+        applyTokenAndRedirect(result.token, supabase)
+      }
     }, POLL_INTERVAL_MS)
 
     return () => {
@@ -245,6 +256,25 @@ export default function AuthWaitingPage() {
               >
                 <p className="text-sm text-red-400">
                   Something went wrong. Please try signing in again from the login page.
+                </p>
+                <a
+                  href="/login"
+                  className="inline-block text-sm font-medium text-amber-400 underline underline-offset-2 hover:text-amber-300"
+                >
+                  Back to login
+                </a>
+              </motion.div>
+            )}
+
+            {status === "expired" && (
+              <motion.div
+                key="expired"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="space-y-4 py-6 text-center"
+              >
+                <p className="text-sm text-amber-400/90">
+                  This link may have expired or was not confirmed yet. Request a new sign-in link from the login page.
                 </p>
                 <a
                   href="/login"
