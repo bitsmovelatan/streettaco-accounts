@@ -59,8 +59,8 @@ export async function GET(request: Request) {
     }
   }
 
-  // Only the validator (device that clicked) hits this route. Redirect to verified-done so we can
-  // sign them out and show "CONNECTED - close this tab". The waiting device gets the session via auth_sync and redirects to return_to.
-  const verifiedDoneUrl = new URL("/auth/verified-done", requestUrl.origin)
-  return NextResponse.redirect(verifiedDoneUrl.toString())
+  // Only the validator (device that clicked) hits this route. Redirect to /actions/closer so we
+  // sign them out and show "You can close this tab...". The waiting device gets the session via auth_sync and redirects to return_to.
+  const closerUrl = new URL("/actions/closer", requestUrl.origin)
+  return NextResponse.redirect(closerUrl.toString())
 }
