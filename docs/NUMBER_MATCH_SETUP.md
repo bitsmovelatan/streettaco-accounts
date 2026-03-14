@@ -2,9 +2,10 @@
 
 The "Check your email and select this number to securely sign in" flow uses:
 
-1. **Magic link request** → insert into `auth_sync` (pending), then Supabase `signInWithOtp` sends the email.
-2. **User clicks link in email** → lands on `/auth/callback?code=...&expected_match=...` → callback exchanges code, updates `auth_sync` to `verified` with session token.
-3. **Waiting page** → either receives a **Realtime** UPDATE on `auth_sync`, or **polling** (every 2s) detects `status = 'verified'` → sets session and redirects.
+1. **Magic link request** → insert into `auth_sync` (pending), then **Supabase Admin generateLink** (no email from Supabase), then **Resend** sends a custom email with the match number and decoy numbers; the only clickable number links to our callback.
+2. **User clicks the number in the email** → link goes to Supabase verify, then redirects to **our** `/auth/callback?expected_match=...&return_to=...` (Accounts).
+3. **Callback** → exchanges code, updates `auth_sync` to `verified`, sets cookie, redirects to `return_to`.
+4. **Waiting page** → Realtime or **polling** (every 2s) detects `status = 'verified'` → sets session and redirects.
 
 If the number never “arrives” (waiting page stays stuck), check the following.
 
@@ -12,14 +13,14 @@ If the number never “arrives” (waiting page stays stuck), check the followin
 
 ## 1. Supabase Auth: Redirect URLs
 
-The link in the email must point to your callback. In **Supabase Dashboard → Authentication → URL Configuration**:
+The magic link we send (from `generateLink`) uses `redirectTo: ourCallbackUrl`. Supabase will redirect the user to that URL after verification. In **Supabase Dashboard → Authentication → URL Configuration**:
 
-- **Site URL**: `https://accounts.streettaco.com.au` (or your Accounts origin).
+- **Site URL**: `https://accounts.streettaco.com.au` (Accounts origin).
 - **Redirect URLs**: add at least:
   - `https://accounts.streettaco.com.au/auth/callback`
   - `http://localhost:3000/auth/callback` (for local dev)
 
-If the callback URL is not allowlisted, Supabase may redirect elsewhere and the callback (and thus `auth_sync` update) never runs.
+If the callback URL is not allowlisted, Supabase may redirect to Site URL (e.g. Plus) and the number-match flow will not run.
 
 ---
 
@@ -65,14 +66,13 @@ CREATE POLICY "auth_sync_select_verified" ON public.auth_sync
 
 ---
 
-## 4. Email delivery (Supabase Auth)
+## 4. Email delivery (Resend)
 
-If the user never receives the email:
+We **do not** use Supabase’s built-in email for the number-match flow. We use **Resend** to send a custom HTML email that shows the match number and decoy numbers.
 
-- **Authentication → Providers → Email**: confirm "Confirm email" / magic link is enabled.
-- **Authentication → Email Templates**: ensure the magic link template uses `{{ .ConfirmationURL }}` or the correct redirect.
-- Check **Supabase → Logs** for auth/send errors.
-- If using custom SMTP, verify SMTP settings in **Project Settings → Auth**.
+- **Env**: set `RESEND_API_KEY` and `RESEND_FROM` (e.g. `StreetTaco <noreply@yourdomain.com>`). See `.env.example`.
+- **Resend**: verify your domain at https://resend.com/domains and use a `from` address on that domain.
+- If the user never receives the email, check server logs for `[sendMagicLinkWithNumberMatch] Resend failed:` and the Resend dashboard for delivery status.
 
 ---
 

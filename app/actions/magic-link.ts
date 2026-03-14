@@ -1,10 +1,46 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { parseEmail, parseReturnTo } from "@/lib/validations"
+import { Resend } from "resend"
 
 const ACCOUNTS_ORIGIN =
   process.env.NEXT_PUBLIC_ACCOUNTS_ORIGIN || "http://localhost:3000"
+
+function buildNumberMatchEmailHtml(matchNumber: number, confirmUrl: string): string {
+  const decoys: number[] = []
+  while (decoys.length < 3) {
+    const n = Math.floor(10 + Math.random() * 90)
+    if (n !== matchNumber && !decoys.includes(n)) decoys.push(n)
+  }
+  const allNumbers = [matchNumber, ...decoys].sort(() => Math.random() - 0.5)
+  const cells = allNumbers
+    .map(
+      (n) =>
+        n === matchNumber
+          ? `<td align="center" style="padding:12px;"><a href="${confirmUrl}" style="display:inline-block;padding:16px 24px;background:#f59e0b;color:#000;font-weight:bold;font-size:1.25rem;text-decoration:none;border-radius:8px;">${n}</a></td>`
+          : `<td align="center" style="padding:12px;"><span style="display:inline-block;padding:16px 24px;background:#374151;color:#9ca3af;font-size:1.25rem;border-radius:8px;">${n}</span></td>`
+    )
+    .join("")
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;font-family:system-ui,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:24px;">
+  <div style="max-width:400px;margin:0 auto;">
+    <p style="font-size:18px;font-weight:600;">Sign in to StreetTaco ID</p>
+    <p style="color:#a1a1aa;margin-top:8px;">Select the number you see in the app:</p>
+    <table style="width:100%;border-collapse:collapse;margin-top:24px;">
+      <tr>${cells}</tr>
+    </table>
+    <p style="margin-top:24px;font-size:14px;color:#71717a;">Click the number that matches the one on your screen to sign in securely.</p>
+    <p style="margin-top:16px;font-size:12px;color:#52525b;">If you didn't request this, you can ignore this email.</p>
+  </div>
+</body>
+</html>
+  `.trim()
+}
 
 /**
  * Generates a random 2-digit number (10–99) for number-matching magic link flow.
@@ -68,6 +104,74 @@ export async function requestMagicLink(
     matchNumber,
     emailRedirectTo: callbackUrl.toString(),
     waitingPath: waitingPath.pathname + waitingPath.search,
+  }
+}
+
+/**
+ * Number-match magic link: insert auth_sync, generate link via Supabase Admin (no Supabase email),
+ * send our own email with the match number and decoy numbers so the user selects the right one.
+ * The link in the email goes to our callback (accounts) with expected_match, not to Plus.
+ * Requires: SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM (e.g. "StreetTaco <noreply@yourdomain.com>").
+ */
+export async function sendMagicLinkWithNumberMatch(
+  email: string,
+  returnTo: string | null,
+  next: string | null
+): Promise<RequestMagicLinkResult> {
+  const result = await requestMagicLink(email, returnTo, next)
+  if (!result.ok) return result
+
+  const { matchNumber, emailRedirectTo: callbackUrl, waitingPath } = result
+  const normalizedEmail = email.trim().toLowerCase()
+
+  let actionLink: string
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: normalizedEmail,
+      options: { redirectTo: callbackUrl },
+    })
+    if (error) {
+      console.error("[sendMagicLinkWithNumberMatch] generateLink failed:", error)
+      return { ok: false, error: "Could not create sign-in link. Please try again." }
+    }
+    const props = (data as { properties?: { action_link?: string }; action_link?: string })?.properties
+    actionLink = props?.action_link ?? (data as { action_link?: string })?.action_link ?? ""
+    if (!actionLink) {
+      console.error("[sendMagicLinkWithNumberMatch] no action_link in response:", data)
+      return { ok: false, error: "Could not create sign-in link. Please try again." }
+    }
+  } catch (e) {
+    console.error("[sendMagicLinkWithNumberMatch] admin/generateLink error:", e)
+    return { ok: false, error: "Server error. Please try again." }
+  }
+
+  const resendKey = process.env.RESEND_API_KEY
+  const resendFrom = process.env.RESEND_FROM ?? "StreetTaco <onboarding@resend.dev>"
+  if (!resendKey) {
+    console.error("[sendMagicLinkWithNumberMatch] RESEND_API_KEY not set")
+    return { ok: false, error: "Email is not configured. Please try again later." }
+  }
+
+  const resend = new Resend(resendKey)
+  const html = buildNumberMatchEmailHtml(matchNumber, actionLink)
+  const { error: sendError } = await resend.emails.send({
+    from: resendFrom,
+    to: [normalizedEmail],
+    subject: `Sign in to StreetTaco ID — select number ${matchNumber}`,
+    html,
+  })
+  if (sendError) {
+    console.error("[sendMagicLinkWithNumberMatch] Resend failed:", sendError)
+    return { ok: false, error: "Could not send email. Please try again." }
+  }
+
+  return {
+    ok: true,
+    matchNumber,
+    emailRedirectTo: callbackUrl,
+    waitingPath: waitingPath,
   }
 }
 

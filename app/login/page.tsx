@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
-import { requestMagicLink } from "@/app/actions/magic-link"
+import { sendMagicLinkWithNumberMatch } from "@/app/actions/magic-link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -66,29 +66,15 @@ export default function LoginPage() {
     setError(null)
     setLoading("magic")
 
-    const result = await requestMagicLink(
+    const result = await sendMagicLinkWithNumberMatch(
       email.trim(),
       returnTo !== DEFAULT_RETURN_URL ? returnTo : null,
       searchParams.get("next")
     )
 
-    if (!result.ok) {
-      setLoading(null)
-      setError(result.error)
-      return
-    }
-
-    const supabase = createClient()
-    const { error: magicError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: result.emailRedirectTo,
-      },
-    })
-
     setLoading(null)
-    if (magicError) {
-      setError(magicError.message)
+    if (!result.ok) {
+      setError(result.error)
       return
     }
     router.push(result.waitingPath)
