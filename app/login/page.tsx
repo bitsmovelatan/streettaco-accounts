@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AuroraBackground } from "@/components/ui/aurora-background"
+import { CatrinaBackground } from "@/components/ui/catrina-background"
 import { Card } from "@/components/ui/card"
 
 /** Active session info: email + expiry timestamp for "Expires in X min/hours" */
@@ -194,8 +195,9 @@ export default function LoginPage() {
   // Active Session: show card only; Magic Link form is completely hidden to prevent redundant login
   if (activeSession != null) {
     return (
-      <AuroraBackground className="px-4 text-white">
-        <div className="relative z-10 flex justify-center">
+      <div className="relative min-h-screen flex items-center justify-center text-white">
+        <CatrinaBackground opacity={0.15} blur="1px" />
+        <div className="relative z-10 px-4">
           <ActiveSessionCard
             email={activeSession.email}
             expiresAt={activeSession.expiresAt}
@@ -204,7 +206,7 @@ export default function LoginPage() {
             isSigningOut={loading === "logout"}
           />
         </div>
-      </AuroraBackground>
+      </div>
     )
   }
 
