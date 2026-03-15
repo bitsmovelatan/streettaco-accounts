@@ -8,17 +8,23 @@ import { createClient } from "@/lib/supabase/client"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
 import { isTrustedReturnUrl } from "@/lib/validations"
 import { sendMagicLinkWithNumberMatch } from "@/app/actions/magic-link"
+import { ActiveSessionCard } from "@/components/auth/active-session-card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AuroraBackground } from "@/components/ui/aurora-background"
 import { Card } from "@/components/ui/card"
 
+/** Active session info: email + expiry timestamp for "Expires in X min/hours" */
+type ActiveSession = { email: string; expiresAt: number }
+
 export default function LoginPage() {
   const [mounted, setMounted] = useState(false)
   const [email, setEmail] = useState("")
-  const [loading, setLoading] = useState<"checking" | "google" | "magic" | null>("checking")
+  const [loading, setLoading] = useState<"checking" | "google" | "magic" | "logout" | null>("checking")
   const [error, setError] = useState<string | null>(null)
+  /** If set, user has an active session; show Session Active card and hide login form entirely */
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null)
   // If URL has access_token in hash (Supabase sent user to /login from mobile), show recovering UI immediately to avoid blank screen
   const [recoveringFromHash, setRecoveringFromHash] = useState(() =>
     typeof window !== "undefined" && window.location.hash.includes("access_token")
@@ -85,19 +91,19 @@ export default function LoginPage() {
     setError(messages[err] ?? "Algo falló. Intenta de nuevo.")
   }, [mounted, searchParams])
 
+  // Check for existing session on mount; populate activeSession so we can show Active Session UI
   useEffect(() => {
     if (!mounted || typeof window === "undefined") return
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        const params = new URLSearchParams()
-        if (returnTo) params.set("return_to", returnTo)
-        router.replace(params.toString() ? `/?${params.toString()}` : "/")
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s?.user?.email != null) {
+        setActiveSession({ email: s.user.email, expiresAt: s.expires_at ?? 0 })
       } else {
-        setLoading(null)
+        setActiveSession(null)
       }
+      setLoading(null)
     })
-  }, [mounted, router, returnTo])
+  }, [mounted])
 
   async function handleGoogleSignIn() {
     if (typeof window === "undefined") return
@@ -112,6 +118,22 @@ export default function LoginPage() {
         redirectTo: redirectTo.toString(),
       },
     })
+  }
+
+  function handleContinueWithSession() {
+    // Redirect to return_to only when validated (isTrustedReturnUrl); already in safeReturnTo
+    const url = safeReturnTo.startsWith("http") ? safeReturnTo : new URL(safeReturnTo, window.location.origin).toString()
+    window.location.href = url
+  }
+
+  async function handleSignOutAndUseAnother() {
+    if (typeof window === "undefined") return
+    setError(null)
+    setLoading("logout")
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setActiveSession(null)
+    setLoading(null)
   }
 
   async function handleMagicLink(e: React.FormEvent) {
@@ -168,6 +190,25 @@ export default function LoginPage() {
       </div>
     )
   }
+
+  // Active Session: show card only; Magic Link form is completely hidden to prevent redundant login
+  if (activeSession != null) {
+    return (
+      <AuroraBackground className="px-4 text-white">
+        <div className="relative z-10 flex justify-center">
+          <ActiveSessionCard
+            email={activeSession.email}
+            expiresAt={activeSession.expiresAt}
+            onContinue={handleContinueWithSession}
+            onSignOut={handleSignOutAndUseAnother}
+            isSigningOut={loading === "logout"}
+          />
+        </div>
+      </AuroraBackground>
+    )
+  }
+
+  // No active session: show standard Email / Magic Link / Google form
 
   const isLoading = loading !== null
 

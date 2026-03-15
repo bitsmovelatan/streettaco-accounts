@@ -6,7 +6,8 @@ import { parseReturnTo } from "@/lib/validations"
 /**
  * Master middleware for the IdP.
  * - Keeps Supabase session in sync using the shared cookie domain (.streettaco.com.au).
- * - If an authenticated user hits /login, sends them to return_to or the profile dashboard.
+ * - For /login: do NOT redirect even if a session exists; let the request reach the page so
+ *   the user can see the Active Session UI (email, expires in X min/hours, continue or sign out).
  */
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
@@ -57,13 +58,10 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // If already authenticated and visiting /login, redirect to trusted return_to or profile.
-  if (user && pathname === "/login") {
-    const returnTo = request.nextUrl.searchParams.get("return_to")
-    const parsed = returnTo ? parseReturnTo(returnTo) : null
-    const target =
-      parsed?.ok === true ? parsed.url : new URL("/profile", request.url).toString()
-    return NextResponse.redirect(target)
+  // Do not redirect away from /login when session exists; login page shows Active Session card
+  // and lets the user choose "Continue to Dashboard" or "Sign out and use another account".
+  if (pathname === "/login") {
+    return supabaseResponse
   }
 
   const protectedPaths = ["/profile", "/security", "/consent"]
