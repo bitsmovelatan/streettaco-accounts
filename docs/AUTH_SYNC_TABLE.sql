@@ -7,6 +7,9 @@
 -- 1. User requests magic link → INSERT (email, match_number, status 'pending').
 -- 2. User clicks number in email → callback UPDATE (status 'verified', token).
 -- 3. Waiting page SELECTs where status = 'verified' (or Realtime) to get token and complete sign-in.
+--
+-- Allowed status values only: 'pending', 'verified'. If you get error 23514 (check constraint auth_sync_status_check)
+-- with status = 'active', run docs/AUTH_SYNC_FIX_STATUS_CONSTRAINT.sql and ensure no trigger/script uses 'active'.
 
 CREATE TABLE IF NOT EXISTS public.auth_sync (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,7 +31,6 @@ CREATE POLICY "auth_sync_insert" ON public.auth_sync
 
 CREATE POLICY "auth_sync_insert_authenticated" ON public.auth_sync
   FOR INSERT TO authenticated WITH CHECK (true);
-
 -- UPDATE: anon (legacy) and authenticated (callback/complete runs with user session, so role is authenticated)
 CREATE POLICY "auth_sync_update" ON public.auth_sync
   FOR UPDATE TO anon USING (status = 'pending');
