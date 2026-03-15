@@ -2,6 +2,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { parseReturnTo } from "@/lib/validations"
 import { getPendingLegalDocumentsForUser } from "@/app/actions/legal"
 
 async function getOrigin() {
@@ -24,9 +25,12 @@ export default async function HomePage({
   } = await supabase.auth.getUser()
   const origin = await getOrigin()
 
+  const parsedReturn = return_to ? parseReturnTo(return_to) : null
+  const safeReturnTo = parsedReturn?.ok === true ? parsedReturn.url : null
+
   if (!user) {
     const loginUrl = new URL("/login", origin)
-    if (return_to) loginUrl.searchParams.set("return_to", return_to)
+    if (safeReturnTo) loginUrl.searchParams.set("return_to", safeReturnTo)
     redirect(loginUrl.toString())
   }
 
@@ -42,10 +46,10 @@ export default async function HomePage({
 
   if (needsProfileConsent || needsLegalConsent) {
     const consentUrl = new URL("/consent", origin)
-    if (return_to) consentUrl.searchParams.set("return_to", return_to)
+    if (safeReturnTo) consentUrl.searchParams.set("return_to", safeReturnTo)
     redirect(consentUrl.toString())
   }
 
-  const destination = return_to ?? DEFAULT_RETURN_URL
+  const destination = safeReturnTo ?? DEFAULT_RETURN_URL
   redirect(destination)
 }

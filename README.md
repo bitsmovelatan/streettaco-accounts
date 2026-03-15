@@ -28,8 +28,10 @@ Identity Provider for the Street Taco ecosystem at **accounts.streettaco.com.au*
 
 ## Navigation
 
-- **return_to** is always preferred when present.
-- Fallback when no `return_to`: **https://plus.streettaco.com.au**.
+- **return_to** is never fixed: any subdomain **\*.streettaco.com.au** can send users to accounts and pass `return_to` to redirect back (e.g. plus, app, dashboard). Only trusted URLs are accepted; others fall back to Plus.
+- **return_to** is always preferred when present and valid.
+- Fallback when no valid `return_to`: **https://plus.streettaco.com.au**.
+- Callers (Plus, Admin) must pass their current URL as `return_to` so redirect is synced with who called; see **docs/SSO_CALLERS.md**.
 
 ## Source
 

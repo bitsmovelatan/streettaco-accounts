@@ -58,6 +58,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const closerUrl = new URL("/actions/closer", requestUrl.origin)
-  return NextResponse.redirect(closerUrl.toString())
+  // Validator (e.g. mobile): do NOT redirect to return_to; send to completed page so they can close the tab.
+  const completedUrl = new URL("/auth/completed", requestUrl.origin)
+  return NextResponse.redirect(completedUrl.toString())
 }

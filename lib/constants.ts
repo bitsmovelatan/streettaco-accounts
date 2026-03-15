@@ -1,4 +1,7 @@
-/** Default redirect when no return_to is provided (Street Taco Plus). */
+/**
+ * Default redirect when no return_to is provided (Street Taco Plus).
+ * return_to is never fixed: any subdomain *.streettaco.com.au is allowed (see isTrustedReturnUrl).
+ */
 export const DEFAULT_RETURN_URL = "https://plus.streettaco.com.au"
 
 /** Cookie key shared across all subdomains so plus/accounts read the same session. */

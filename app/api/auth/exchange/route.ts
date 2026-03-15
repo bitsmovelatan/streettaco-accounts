@@ -122,6 +122,33 @@ export async function GET(request: Request) {
       if (next) loginUrl.searchParams.set("next", next)
       return NextResponse.redirect(loginUrl)
     }
+
+    // Number-match flow (validator on mobile): do NOT redirect to return_to; send to /auth/completed.
+    const completedUrl = new URL("/auth/completed", requestUrl.origin)
+    const response = NextResponse.redirect(completedUrl.toString())
+    if (isProduction()) {
+      cookiesToSet.forEach(({ name, value, options }) => {
+        response.cookies.set(name, value, {
+          domain: COOKIE_OPTIONS.domain,
+          path: COOKIE_OPTIONS.path,
+          sameSite: COOKIE_OPTIONS.sameSite,
+          secure: COOKIE_OPTIONS.secure,
+          httpOnly: COOKIE_OPTIONS.httpOnly,
+          maxAge: (options?.maxAge as number) ?? undefined,
+        })
+      })
+    } else {
+      cookiesToSet.forEach(({ name, value, options }) => {
+        response.cookies.set(name, value, {
+          path: (options?.path as string) ?? "/",
+          maxAge: (options?.maxAge as number) ?? undefined,
+          httpOnly: (options?.httpOnly as boolean) ?? true,
+          secure: false,
+          sameSite: (options?.sameSite as "lax" | "strict" | "none") ?? "lax",
+        })
+      })
+    }
+    return response
   }
 
   const cleanUrl = getCleanRedirectUrl(returnTo, next)

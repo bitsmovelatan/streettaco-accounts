@@ -4,8 +4,15 @@ The "Check your email and select this number to securely sign in" flow uses:
 
 1. **Magic link request** → insert into `auth_sync` (pending), then **Supabase Admin generateLink** (no email from Supabase), then **Resend** sends a custom email with the match number and decoy numbers; the only clickable number links to our callback.
 2. **User clicks the number in the email** → link goes to Supabase verify, then redirects to **our** `/auth/callback?expected_match=...&return_to=...` (Accounts).
-3. **Callback** → exchanges code, updates `auth_sync` to `verified`, sets cookie, redirects to `return_to`.
-4. **Waiting page** → Realtime or **polling** (every 2s) detects `status = 'verified'` → sets session and redirects.
+3. **Callback / login** → set session, then **GET `/auth/callback/complete`** → server updates `auth_sync` to `verified`, then redirects the **validator** (device that clicked) to **`/actions/closer`** (Accounts). The validator never goes to Plus.
+4. **Waiting page** (e.g. Chrome) → Realtime or **polling** (every 2s) detects `status = 'verified'` → sets session and redirects to **`return_to`** (e.g. Plus).
+
+### Flujo esperado vs problemas típicos
+
+| Dispositivo | Esperado | Si falla |
+|-------------|----------|----------|
+| **Chrome (esperando)** | Página "Check your email…" → al hacer clic en el móvil, recibe sesión y redirige a Plus **una vez**. | Se queda esperando: revisar §1 (Supabase Redirect), §2 (Realtime), §3 (RLS UPDATE). |
+| **Móvil (validador)** | Tras clic en el número → "You can close this tab" en **accounts** (`/actions/closer`), **sin** abrir Plus. | Va a **plus.streettaco.com.au** y hace **loop**: casi siempre **Site URL o Redirect URLs** en Supabase (§1). |
 
 If the number never “arrives” (waiting page stays stuck), check the following. If **you see no rows in `auth_sync`**, see §0 below.
 
@@ -55,7 +62,9 @@ The link in the email is built by Supabase. We pass `redirectTo: https://account
    And for local dev:
    - `http://localhost:3000/auth/callback` or `http://localhost:3000/**`
 
-3. **Save** and send a new magic link; the link in the email should now go to Accounts and then to your callback (number match + redirect to return_to).
+3. **Env:** In production set `NEXT_PUBLIC_ACCOUNTS_ORIGIN=https://accounts.streettaco.com.au` so the magic-link redirect URL matches the Supabase allowlist (see `app/actions/magic-link.ts`).
+
+4. **Save** and send a new magic link; the link in the email should now go to Accounts and then to your callback (number match + redirect to return_to).
 
 ### When you click the number on another device (e.g. phone)
 
@@ -63,7 +72,7 @@ The flow is: **PC** has the waiting page open → you click the number in the em
 
 - If you end up on **login** after clicking on the phone, look at the URL: `?error=...` tells you why (e.g. `no_code`, `auth_failed`, `number_mismatch`). The login page now shows a short message for each.
 - For the **PC** to get the session, the callback must receive **both** the auth payload and **`expected_match`**. The link Supabase builds must keep the full redirect URL we pass (with query params). In **Redirect URLs** you can use e.g. `https://accounts.streettaco.com.au/auth/callback` or `https://*.streettaco.com.au/auth/callback` so the full URL with `expected_match` and `return_to` is allowed. Do **not** put a path or wildcard in **Site URL** (see above).
-- Supabase may redirect with tokens in the **URL hash** (`#access_token=...`) instead of `?code=...`. The hash is only visible in the browser. We handle this with a client-side callback page that runs in the browser: it reads the hash, calls `setSession`, then redirects to `/auth/callback/complete`, which updates `auth_sync` and redirects to `return_to`.
+- Supabase may redirect with tokens in the **URL hash** (`#access_token=...`) instead of `?code=...`. The hash is only visible in the browser. We handle this with a client-side callback page that runs in the browser: it reads the hash, calls `setSession`, then redirects to `/auth/callback/complete`, which updates `auth_sync` and then **redirects the validator to `/actions/closer`** (never to Plus). Only the **waiting** device (e.g. Chrome) later redirects to `return_to` (Plus) after receiving the session.
 - Ensure **Realtime** and **RLS** (below) are set so the PC’s waiting page can see the `auth_sync` update; otherwise only the device that clicked gets the session (via cookies), and the PC keeps waiting.
 
 ---

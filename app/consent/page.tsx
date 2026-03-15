@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ConsentManager } from "@/components/consent/consent-manager"
 import { DEFAULT_RETURN_URL } from "@/lib/constants"
+import { parseReturnTo } from "@/lib/validations"
 import { getPendingLegalDocumentsForUser } from "@/app/actions/legal"
 
 export const metadata = {
@@ -28,10 +29,12 @@ export default async function ConsentPage({
   } = await supabase.auth.getUser()
   const params = await searchParams
   const origin = await getOrigin()
+  const parsedReturn = params.return_to ? parseReturnTo(params.return_to) : null
+  const safeReturnTo = parsedReturn?.ok === true ? parsedReturn.url : null
 
   if (!user) {
     const loginUrl = new URL("/login", origin)
-    loginUrl.searchParams.set("return_to", params.return_to ?? `${origin}/consent`)
+    loginUrl.searchParams.set("return_to", safeReturnTo ?? `${origin}/consent`)
     redirect(loginUrl.toString())
   }
 
@@ -46,13 +49,13 @@ export default async function ConsentPage({
   const needsLegalDocsConsent = pendingDocuments.length > 0
 
   if (!needsProfileConsent && !needsLegalDocsConsent) {
-    redirect(params.return_to ?? DEFAULT_RETURN_URL)
+    redirect(safeReturnTo ?? DEFAULT_RETURN_URL)
   }
 
   return (
     <div className="min-h-screen px-4 py-8 sm:py-12">
       <ConsentManager
-        returnToFromServer={params.return_to ?? undefined}
+        returnToFromServer={safeReturnTo ?? undefined}
         needsProfileConsent={needsProfileConsent}
         pendingLegalDocuments={pendingDocuments}
       />

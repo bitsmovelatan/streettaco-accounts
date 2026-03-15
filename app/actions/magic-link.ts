@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { parseEmail, parseReturnTo } from "@/lib/validations"
 import { Resend } from "resend"
 
+/** Origin for accounts app. Magic-link redirect always goes here (must match Supabase Redirect URLs). */
 const ACCOUNTS_ORIGIN =
   process.env.NEXT_PUBLIC_ACCOUNTS_ORIGIN || "http://localhost:3000"
 
@@ -101,6 +102,7 @@ export async function requestMagicLink(
     console.log("[requestMagicLink] auth_sync insert ok:", { id: insertData?.id, email: normalizedEmail, match_number: matchNumber })
   }
 
+  // Always accounts origin so Supabase redirects to accounts (not Plus). Must be allowlisted in Supabase → URL Configuration.
   const callbackUrl = new URL("/auth/callback", ACCOUNTS_ORIGIN)
   callbackUrl.searchParams.set("expected_match", String(matchNumber))
   if (safeReturnTo) callbackUrl.searchParams.set("return_to", safeReturnTo)

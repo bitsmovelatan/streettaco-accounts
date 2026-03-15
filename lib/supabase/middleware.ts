@@ -70,8 +70,9 @@ export async function updateSession(request: NextRequest) {
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
   if (!user && isProtected) {
     const loginUrl = new URL("/login", request.url)
-    const returnTo = request.nextUrl.searchParams.get("return_to") || request.url
-    loginUrl.searchParams.set("return_to", returnTo)
+    const rawReturnTo = request.nextUrl.searchParams.get("return_to") || request.url
+    const parsed = parseReturnTo(rawReturnTo)
+    if (parsed.ok) loginUrl.searchParams.set("return_to", parsed.url)
     return NextResponse.redirect(loginUrl)
   }
 

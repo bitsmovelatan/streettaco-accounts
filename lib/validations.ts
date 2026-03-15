@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-/** Matches streettaco.com.au and any subdomain (e.g. plus.streettaco.com.au). */
+/** Matches streettaco.com.au and any subdomain (*.streettaco.com.au). Callbacks from any subdomain are allowed. */
 const TRUSTED_HOST_REGEX = /^(.*?\.)?streettaco\.com\.au$/
 
 /**
@@ -28,6 +28,7 @@ export function isTrustedReturnUrl(url: string): boolean {
 
 /**
  * Validates that a URL is a trusted subdomain of streettaco.com.au (or the root domain).
+ * Any *.streettaco.com.au can call accounts and use return_to to redirect back (e.g. plus, app, dashboard).
  * Used for return_to / next redirect targets to prevent open redirects.
  */
 export const trustedReturnUrlSchema = z
