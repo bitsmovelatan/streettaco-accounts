@@ -41,6 +41,10 @@ export default function AuthWaitingPage() {
 
   const appliedRef = useRef(false)
 
+  /**
+   * Apply session client-side (Supabase client uses shared domain cookie in production)
+   * then redirect to return_to (e.g. Plus) after a short delay so the cookie is committed.
+   */
   function applyTokenAndRedirect(tokenRaw: string, supabaseClient: ReturnType<typeof createClient>) {
     if (appliedRef.current) return
     let access_token: string
@@ -50,7 +54,8 @@ export default function AuthWaitingPage() {
       access_token = parsed.access_token ?? tokenRaw
       refresh_token = parsed.refresh_token ?? ""
     } catch {
-      access_token = tokenRaw
+      setStatus("error")
+      return
     }
     if (!access_token) return
     appliedRef.current = true
