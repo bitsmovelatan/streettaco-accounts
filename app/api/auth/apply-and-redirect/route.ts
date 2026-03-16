@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     }
   } else {
     const formData = await request.formData()
-    tokenRaw = formData.get("token") as string | null
+    tokenRaw = (formData.get("token") as string | null) ?? undefined
     returnToRaw = (formData.get("return_to") as string | null) ?? undefined
   }
   returnToRaw = returnToRaw ?? DEFAULT_RETURN_URL
