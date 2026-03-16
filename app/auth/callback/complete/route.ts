@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
 /**
@@ -24,37 +25,69 @@ export async function GET(request: Request) {
     return NextResponse.redirect(loginUrl)
   }
 
-  const email = session.user?.email
+  const cleanEmail = session.user?.email?.toLowerCase().trim() ?? null
   const tokenPayload = JSON.stringify({
     access_token: session.access_token,
     refresh_token: session.refresh_token ?? null,
   })
 
-  if (expectedMatchParam !== null && expectedMatchParam !== "") {
+  if (expectedMatchParam !== null && expectedMatchParam !== "" && cleanEmail) {
     const expectedMatch = parseInt(expectedMatchParam, 10)
-    if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99 && email) {
-      const { error } = await supabase
+    if (!Number.isNaN(expectedMatch) && expectedMatch >= 10 && expectedMatch <= 99) {
+      const matchNumber = expectedMatch
+      console.log("[auth/callback/complete] attempting auth_sync update", {
+        email: cleanEmail,
+        matchNumber,
+      })
+
+      const { data: updateData, error: updateError } = await supabaseAdmin
         .from("auth_sync")
-        .update({ status: "verified", token: tokenPayload })
-        .eq("email", email.toLowerCase())
-        .eq("match_number", expectedMatch)
-        .eq("status", "pending")
+        .update({
+          status: "verified",
+          token: tokenPayload,
+        })
+        .match({
+          email: cleanEmail,
+          match_number: matchNumber,
+          status: "pending",
+        })
         .select("id")
-        .maybeSingle()
-      if (error) {
-        console.error("[auth/callback/complete] auth_sync update failed:", { code: error.code, message: error.message })
+
+      if (updateError) {
+        console.error("[auth/callback/complete] auth_sync update failed:", updateError)
+      } else if (!updateData || updateData.length === 0) {
+        console.error(
+          "[auth/callback/complete] auth_sync update found no rows to update. Check email/match_number/status.",
+          { email: cleanEmail, matchNumber }
+        )
+      } else {
+        console.log("[auth/callback/complete] auth_sync update succeeded", {
+          email: cleanEmail,
+          matchNumber,
+        })
       }
     }
-  } else if (email) {
-    const { error } = await supabase
+  } else if (cleanEmail) {
+    const { data: updateData, error: updateError } = await supabaseAdmin
       .from("auth_sync")
       .update({ status: "verified", token: tokenPayload })
-      .eq("email", email.toLowerCase())
-      .eq("status", "pending")
+      .match({
+        email: cleanEmail,
+        status: "pending",
+      })
       .select("id")
-      .maybeSingle()
-    if (error) {
-      console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", { code: error.code, message: error.message })
+
+    if (updateError) {
+      console.error("[auth/callback/complete] auth_sync update (no expected_match) failed:", updateError)
+    } else if (!updateData || updateData.length === 0) {
+      console.error(
+        "[auth/callback/complete] auth_sync update (no expected_match) found no rows to update.",
+        { email: cleanEmail }
+      )
+    } else {
+      console.log("[auth/callback/complete] auth_sync update (no expected_match) succeeded", {
+        email: cleanEmail,
+      })
     }
   }
 
