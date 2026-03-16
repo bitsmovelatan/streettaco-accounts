@@ -15,8 +15,18 @@ export async function GET(request: Request) {
   const next = requestUrl.searchParams.get("next")
 
   const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
 
+  if (userError || !user) {
+    console.error("[auth/callback/complete] Token no válido o sesión manipulada", userError?.message)
+    const loginUrl = new URL("/login", requestUrl.origin)
+    loginUrl.searchParams.set("error", "no_session")
+    if (returnTo) loginUrl.searchParams.set("return_to", returnTo)
+    if (next) loginUrl.searchParams.set("next", next)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  const { data: { session } } = await supabase.auth.getSession()
   if (!session) {
     const loginUrl = new URL("/login", requestUrl.origin)
     loginUrl.searchParams.set("error", "no_session")
@@ -25,7 +35,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(loginUrl)
   }
 
-  const cleanEmail = session.user?.email?.toLowerCase().trim() ?? null
+  const cleanEmail = user.email?.toLowerCase().trim() ?? null
   const tokenPayload = JSON.stringify({
     access_token: session.access_token,
     refresh_token: session.refresh_token ?? null,
